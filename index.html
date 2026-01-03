@@ -76,18 +76,7 @@
       }
 
       #skier-panel {
-        position: absolute;
-        top: 350px;
-        right: 10px;
-        width: 280px;
-        background: rgba(0, 0, 0, 0.8);
-        color: white;
-        border-radius: 8px;
-        pointer-events: auto;
-        font-size: 0.9rem;
-        z-index: 100;
-        overflow: hidden;
-        transition: height 0.3s ease;
+        display: none; /* Hidden but kept for functionality */
       }
 
       #debug-header {
@@ -425,6 +414,37 @@
       let leftTurnBaseValues = { pelvisY: 0, headY: 0 };
       let isLeftTurning = false;
       let leftTurnTime = 0;
+
+      // Crash animation state
+      let crashAnimationSpeed = 1.25;
+      let crashAnimationParams = {
+        pelvisZ: -3.14,
+        hipX: 1.53,
+        hipY: -0.97,
+        hipZ: 0.83,
+        lThighY: 0.28,
+        lThighZ: 1.33,
+        rThighY: -0.27,
+        rThighZ: 1.33,
+        headZ: 0.88,
+        rHandY: -1.57,
+        lHandY: 1.53,
+      };
+      let crashBaseValues = {
+        pelvisZ: 0,
+        hipX: 0,
+        hipY: 0,
+        hipZ: 0,
+        lThighY: 0,
+        lThighZ: 0,
+        rThighY: 0,
+        rThighZ: 0,
+        headZ: 0,
+        rHandY: 0,
+        lHandY: 0,
+      };
+      let isCrashing = false;
+      let crashTime = 0;
 
       let gameActive = true;
       let score = 0;
@@ -1638,6 +1658,9 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         // Update jump animation
         updateJumpAnimation(delta);
 
+        // Update crash animation
+        updateCrashAnimation(delta);
+
         // Update turn animations
         updateRightTurnAnimation(delta);
         updateLeftTurnAnimation(delta);
@@ -1757,6 +1780,163 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         setTimeout(() => {
           overlay.style.opacity = 0;
         }, 100);
+
+        // Start crash animation
+        startCrashAnimation();
+      }
+
+      function startCrashAnimation() {
+        if (!boneParams.L_Thigh || !boneParams.R_Thigh || !boneParams.Head)
+          return;
+
+        // Store base values (current position)
+        if (boneParams.Pelvis) crashBaseValues.pelvisZ = boneParams.Pelvis.z;
+        if (boneParams.Hip) {
+          crashBaseValues.hipX = boneParams.Hip.x;
+          crashBaseValues.hipY = boneParams.Hip.y;
+          crashBaseValues.hipZ = boneParams.Hip.z;
+        }
+        crashBaseValues.lThighY = boneParams.L_Thigh.y;
+        crashBaseValues.lThighZ = boneParams.L_Thigh.z;
+        crashBaseValues.rThighY = boneParams.R_Thigh.y;
+        crashBaseValues.rThighZ = boneParams.R_Thigh.z;
+        crashBaseValues.headZ = boneParams.Head.z;
+        if (boneParams.R_Hand) crashBaseValues.rHandY = boneParams.R_Hand.y;
+        if (boneParams.L_Hand) crashBaseValues.lHandY = boneParams.L_Hand.y;
+
+        isCrashing = true;
+        crashTime = 0;
+      }
+
+      function resetCrashAnimation() {
+        if (!boneParams.L_Thigh || !boneParams.R_Thigh || !boneParams.Head)
+          return;
+
+        // Reset to skiing pose values (not crash base values, which may include animation offsets)
+        // Use the same values from applySkiingPose()
+        if (boneParams.Pelvis) {
+          boneParams.Pelvis.z = -2.44;
+          updateBoneRotation("Pelvis");
+        }
+
+        if (boneParams.Hip) {
+          boneParams.Hip.x = 0.73;
+          boneParams.Hip.y = -0.83;
+          boneParams.Hip.z = -0.14;
+          updateBoneRotation("Hip");
+        }
+
+        if (boneParams.L_Thigh) {
+          boneParams.L_Thigh.y = 0.01;
+          boneParams.L_Thigh.z = 0.6;
+          updateBoneRotation("L_Thigh");
+        }
+
+        if (boneParams.R_Thigh) {
+          boneParams.R_Thigh.y = 0.03;
+          boneParams.R_Thigh.z = 0.6;
+          updateBoneRotation("R_Thigh");
+        }
+
+        if (boneParams.Head) {
+          boneParams.Head.z = 0;
+          updateBoneRotation("Head");
+        }
+
+        if (boneParams.R_Hand) {
+          boneParams.R_Hand.y = 0.38;
+          updateBoneRotation("R_Hand");
+        }
+
+        if (boneParams.L_Hand) {
+          boneParams.L_Hand.y = 0;
+          updateBoneRotation("L_Hand");
+        }
+
+        isCrashing = false;
+        crashTime = 0;
+      }
+
+      function updateCrashAnimation(deltaTime) {
+        if (!isCrashing) return;
+
+        crashTime += deltaTime * crashAnimationSpeed;
+        const crashUpDuration = 0.3; // Time to go from base to crash position
+        const crashDownDuration = 0.3; // Time to go from crash back to base
+        const totalDuration = crashUpDuration + crashDownDuration;
+
+        let progress = 0;
+        if (crashTime < crashUpDuration) {
+          const t = crashTime / crashUpDuration;
+          progress = 1 - (1 - t) * (1 - t);
+        } else if (crashTime < totalDuration) {
+          const t = (crashTime - crashUpDuration) / crashDownDuration;
+          progress = 1 - t * t;
+        } else {
+          resetCrashAnimation();
+          return;
+        }
+
+        if (boneParams.Pelvis && skierBones.Pelvis) {
+          boneParams.Pelvis.z =
+            crashBaseValues.pelvisZ +
+            (crashAnimationParams.pelvisZ - crashBaseValues.pelvisZ) * progress;
+          updateBoneRotation("Pelvis");
+        }
+
+        if (boneParams.Hip && skierBones.Hip) {
+          boneParams.Hip.x =
+            crashBaseValues.hipX +
+            (crashAnimationParams.hipX - crashBaseValues.hipX) * progress;
+          boneParams.Hip.y =
+            crashBaseValues.hipY +
+            (crashAnimationParams.hipY - crashBaseValues.hipY) * progress;
+          boneParams.Hip.z =
+            crashBaseValues.hipZ +
+            (crashAnimationParams.hipZ - crashBaseValues.hipZ) * progress;
+          updateBoneRotation("Hip");
+        }
+
+        if (boneParams.L_Thigh && skierBones.L_Thigh) {
+          boneParams.L_Thigh.y =
+            crashBaseValues.lThighY +
+            (crashAnimationParams.lThighY - crashBaseValues.lThighY) * progress;
+          boneParams.L_Thigh.z =
+            crashBaseValues.lThighZ +
+            (crashAnimationParams.lThighZ - crashBaseValues.lThighZ) * progress;
+          updateBoneRotation("L_Thigh");
+        }
+
+        if (boneParams.R_Thigh && skierBones.R_Thigh) {
+          boneParams.R_Thigh.y =
+            crashBaseValues.rThighY +
+            (crashAnimationParams.rThighY - crashBaseValues.rThighY) * progress;
+          boneParams.R_Thigh.z =
+            crashBaseValues.rThighZ +
+            (crashAnimationParams.rThighZ - crashBaseValues.rThighZ) * progress;
+          updateBoneRotation("R_Thigh");
+        }
+
+        if (boneParams.Head && skierBones.Head) {
+          boneParams.Head.z =
+            crashBaseValues.headZ +
+            (crashAnimationParams.headZ - crashBaseValues.headZ) * progress;
+          updateBoneRotation("Head");
+        }
+
+        if (boneParams.R_Hand && skierBones.R_Hand) {
+          boneParams.R_Hand.y =
+            crashBaseValues.rHandY +
+            (crashAnimationParams.rHandY - crashBaseValues.rHandY) * progress;
+          updateBoneRotation("R_Hand");
+        }
+
+        if (boneParams.L_Hand && skierBones.L_Hand) {
+          boneParams.L_Hand.y =
+            crashBaseValues.lHandY +
+            (crashAnimationParams.lHandY - crashBaseValues.lHandY) * progress;
+          updateBoneRotation("L_Hand");
+        }
       }
 
       function showJumpMsg() {

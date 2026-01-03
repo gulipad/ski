@@ -594,6 +594,237 @@
           </button>
         </div>
       </div>
+
+      <!-- Crash Animation Section -->
+      <div class="animation-section">
+        <h3>Crash Animation</h3>
+        <div id="crash-anim-params">
+          <div class="control-group" style="margin-bottom: 10px">
+            <label>Speed</label>
+            <input
+              type="range"
+              id="crash-anim-speed"
+              min="0.5"
+              max="3"
+              step="0.1"
+              value="1.25"
+            />
+            <span id="val-crash-anim-speed">1.25</span>
+          </div>
+          <div
+            style="
+              margin-top: 10px;
+              padding-top: 10px;
+              border-top: 1px solid #444;
+            "
+          >
+            <div class="control-group">
+              <label>Pelvis Z</label>
+              <input
+                type="range"
+                id="crash-pelvis-z"
+                min="-3.14"
+                max="3.14"
+                step="0.01"
+                value="-3.14"
+              />
+              <span id="val-crash-pelvis-z">-3.14</span>
+            </div>
+          </div>
+          <div
+            style="
+              margin-top: 10px;
+              padding-top: 10px;
+              border-top: 1px solid #444;
+            "
+          >
+            <div class="control-group">
+              <label>Hip X</label>
+              <input
+                type="range"
+                id="crash-hip-x"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="1.53"
+              />
+              <span id="val-crash-hip-x">1.53</span>
+            </div>
+            <div class="control-group">
+              <label>Hip Y</label>
+              <input
+                type="range"
+                id="crash-hip-y"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="-0.97"
+              />
+              <span id="val-crash-hip-y">-0.97</span>
+            </div>
+            <div class="control-group">
+              <label>Hip Z</label>
+              <input
+                type="range"
+                id="crash-hip-z"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="0.83"
+              />
+              <span id="val-crash-hip-z">0.83</span>
+            </div>
+          </div>
+          <div
+            style="
+              margin-top: 10px;
+              padding-top: 10px;
+              border-top: 1px solid #444;
+            "
+          >
+            <div class="control-group">
+              <label>L_Thigh Y</label>
+              <input
+                type="range"
+                id="crash-l-thigh-y"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="0.28"
+              />
+              <span id="val-crash-l-thigh-y">0.28</span>
+            </div>
+            <div class="control-group">
+              <label>L_Thigh Z</label>
+              <input
+                type="range"
+                id="crash-l-thigh-z"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="1.33"
+              />
+              <span id="val-crash-l-thigh-z">1.33</span>
+            </div>
+          </div>
+          <div
+            style="
+              margin-top: 10px;
+              padding-top: 10px;
+              border-top: 1px solid #444;
+            "
+          >
+            <div class="control-group">
+              <label>R_Thigh Y</label>
+              <input
+                type="range"
+                id="crash-r-thigh-y"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="-0.27"
+              />
+              <span id="val-crash-r-thigh-y">-0.27</span>
+            </div>
+            <div class="control-group">
+              <label>R_Thigh Z</label>
+              <input
+                type="range"
+                id="crash-r-thigh-z"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="1.33"
+              />
+              <span id="val-crash-r-thigh-z">1.33</span>
+            </div>
+          </div>
+          <div
+            style="
+              margin-top: 10px;
+              padding-top: 10px;
+              border-top: 1px solid #444;
+            "
+          >
+            <div class="control-group">
+              <label>Head Z</label>
+              <input
+                type="range"
+                id="crash-head-z"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="0.88"
+              />
+              <span id="val-crash-head-z">0.88</span>
+            </div>
+          </div>
+          <div
+            style="
+              margin-top: 10px;
+              padding-top: 10px;
+              border-top: 1px solid #444;
+            "
+          >
+            <div class="control-group">
+              <label>R_Hand Y</label>
+              <input
+                type="range"
+                id="crash-r-hand-y"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="-1.57"
+              />
+              <span id="val-crash-r-hand-y">-1.57</span>
+            </div>
+          </div>
+          <div
+            style="
+              margin-top: 10px;
+              padding-top: 10px;
+              border-top: 1px solid #444;
+            "
+          >
+            <div class="control-group">
+              <label>L_Hand Y</label>
+              <input
+                type="range"
+                id="crash-l-hand-y"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="1.53"
+              />
+              <span id="val-crash-l-hand-y">1.53</span>
+            </div>
+          </div>
+          <button
+            id="test-crash"
+            class="secondary"
+            style="
+              margin-top: 10px;
+              padding: 8px;
+              font-size: 0.85rem;
+              width: 100%;
+            "
+          >
+            Test Crash Animation
+          </button>
+          <button
+            id="copy-crash-params"
+            class="secondary"
+            style="
+              margin-top: 10px;
+              padding: 8px;
+              font-size: 0.85rem;
+              width: 100%;
+            "
+          >
+            Copy Parameters
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Controls Panel (Right Side) -->
@@ -665,6 +896,37 @@
       let leftTurnBaseValues = { pelvisY: 0, headY: 0 };
       let isLeftTurning = false;
       let leftTurnTime = 0;
+
+      // Crash animation state
+      let crashAnimationSpeed = 1.25;
+      let crashAnimationParams = {
+        pelvisZ: -3.14,
+        hipX: 1.53,
+        hipY: -0.97,
+        hipZ: 0.83,
+        lThighY: 0.28,
+        lThighZ: 1.33,
+        rThighY: -0.27,
+        rThighZ: 1.33,
+        headZ: 0.88,
+        rHandY: -1.57,
+        lHandY: 1.53,
+      };
+      let crashBaseValues = {
+        pelvisZ: 0,
+        hipX: 0,
+        hipY: 0,
+        hipZ: 0,
+        lThighY: 0,
+        lThighZ: 0,
+        rThighY: 0,
+        rThighZ: 0,
+        headZ: 0,
+        rHandY: 0,
+        lHandY: 0,
+      };
+      let isCrashing = false;
+      let crashTime = 0;
 
       // Initialize scene
       function init() {
@@ -908,8 +1170,14 @@
             const input = document.createElement("input");
             input.type = "range";
             input.id = `bone_${boneName}_${axis}`;
-            input.min = "-1.57";
-            input.max = "1.57";
+            // Increase range for Pelvis Z rotation
+            if (boneName === "Pelvis" && axis === "Z") {
+              input.min = "-3.14";
+              input.max = "3.14";
+            } else {
+              input.min = "-1.57";
+              input.max = "1.57";
+            }
             input.step = "0.05";
             input.value = boneParams[boneName][axis.toLowerCase()];
             controlGroup.appendChild(input);
@@ -1414,6 +1682,139 @@ controls.update();`;
             }, 2000);
           });
         });
+
+        // Crash Animation Controls
+        const crashSpeedInput = document.getElementById("crash-anim-speed");
+        const crashSpeedVal = document.getElementById("val-crash-anim-speed");
+        const crashPelvisZInput = document.getElementById("crash-pelvis-z");
+        const crashPelvisZVal = document.getElementById("val-crash-pelvis-z");
+        const crashHipXInput = document.getElementById("crash-hip-x");
+        const crashHipXVal = document.getElementById("val-crash-hip-x");
+        const crashHipYInput = document.getElementById("crash-hip-y");
+        const crashHipYVal = document.getElementById("val-crash-hip-y");
+        const crashHipZInput = document.getElementById("crash-hip-z");
+        const crashHipZVal = document.getElementById("val-crash-hip-z");
+        const crashLThighInput = document.getElementById("crash-l-thigh-y");
+        const crashLThighVal = document.getElementById("val-crash-l-thigh-y");
+        const crashLThighZInput = document.getElementById("crash-l-thigh-z");
+        const crashLThighZVal = document.getElementById("val-crash-l-thigh-z");
+        const crashRThighInput = document.getElementById("crash-r-thigh-y");
+        const crashRThighVal = document.getElementById("val-crash-r-thigh-y");
+        const crashRThighZInput = document.getElementById("crash-r-thigh-z");
+        const crashRThighZVal = document.getElementById("val-crash-r-thigh-z");
+        const crashHeadInput = document.getElementById("crash-head-z");
+        const crashHeadVal = document.getElementById("val-crash-head-z");
+        const crashRHandInput = document.getElementById("crash-r-hand-y");
+        const crashRHandVal = document.getElementById("val-crash-r-hand-y");
+        const crashLHandInput = document.getElementById("crash-l-hand-y");
+        const crashLHandVal = document.getElementById("val-crash-l-hand-y");
+        const testCrashBtn = document.getElementById("test-crash");
+        const copyCrashParamsBtn = document.getElementById("copy-crash-params");
+
+        crashSpeedInput.addEventListener("input", (e) => {
+          crashAnimationSpeed = parseFloat(e.target.value);
+          crashSpeedVal.textContent = crashAnimationSpeed.toFixed(1);
+        });
+
+        crashPelvisZInput.addEventListener("input", (e) => {
+          crashAnimationParams.pelvisZ = parseFloat(e.target.value);
+          crashPelvisZVal.textContent = crashAnimationParams.pelvisZ.toFixed(2);
+        });
+
+        crashHipXInput.addEventListener("input", (e) => {
+          crashAnimationParams.hipX = parseFloat(e.target.value);
+          crashHipXVal.textContent = crashAnimationParams.hipX.toFixed(2);
+        });
+
+        crashHipYInput.addEventListener("input", (e) => {
+          crashAnimationParams.hipY = parseFloat(e.target.value);
+          crashHipYVal.textContent = crashAnimationParams.hipY.toFixed(2);
+        });
+
+        crashHipZInput.addEventListener("input", (e) => {
+          crashAnimationParams.hipZ = parseFloat(e.target.value);
+          crashHipZVal.textContent = crashAnimationParams.hipZ.toFixed(2);
+        });
+
+        crashLThighInput.addEventListener("input", (e) => {
+          crashAnimationParams.lThighY = parseFloat(e.target.value);
+          crashLThighVal.textContent = crashAnimationParams.lThighY.toFixed(2);
+        });
+
+        crashLThighZInput.addEventListener("input", (e) => {
+          crashAnimationParams.lThighZ = parseFloat(e.target.value);
+          crashLThighZVal.textContent = crashAnimationParams.lThighZ.toFixed(2);
+        });
+
+        crashRThighInput.addEventListener("input", (e) => {
+          crashAnimationParams.rThighY = parseFloat(e.target.value);
+          crashRThighVal.textContent = crashAnimationParams.rThighY.toFixed(2);
+        });
+
+        crashRThighZInput.addEventListener("input", (e) => {
+          crashAnimationParams.rThighZ = parseFloat(e.target.value);
+          crashRThighZVal.textContent = crashAnimationParams.rThighZ.toFixed(2);
+        });
+
+        crashHeadInput.addEventListener("input", (e) => {
+          crashAnimationParams.headZ = parseFloat(e.target.value);
+          crashHeadVal.textContent = crashAnimationParams.headZ.toFixed(2);
+        });
+
+        crashRHandInput.addEventListener("input", (e) => {
+          crashAnimationParams.rHandY = parseFloat(e.target.value);
+          crashRHandVal.textContent = crashAnimationParams.rHandY.toFixed(2);
+        });
+
+        crashLHandInput.addEventListener("input", (e) => {
+          crashAnimationParams.lHandY = parseFloat(e.target.value);
+          crashLHandVal.textContent = crashAnimationParams.lHandY.toFixed(2);
+        });
+
+        testCrashBtn.addEventListener("click", () => {
+          if (isCrashing) {
+            resetCrashAnimation();
+          } else {
+            startCrashAnimation();
+          }
+        });
+
+        copyCrashParamsBtn.addEventListener("click", () => {
+          const params = {
+            speed: crashAnimationSpeed,
+            pelvisZ: crashAnimationParams.pelvisZ,
+            hipX: crashAnimationParams.hipX,
+            hipY: crashAnimationParams.hipY,
+            hipZ: crashAnimationParams.hipZ,
+            lThighY: crashAnimationParams.lThighY,
+            lThighZ: crashAnimationParams.lThighZ,
+            rThighY: crashAnimationParams.rThighY,
+            rThighZ: crashAnimationParams.rThighZ,
+            headZ: crashAnimationParams.headZ,
+            rHandY: crashAnimationParams.rHandY,
+            lHandY: crashAnimationParams.lHandY,
+          };
+          const code = `const crashAnimationParams = {
+  speed: ${params.speed.toFixed(1)},
+  pelvisZ: ${params.pelvisZ.toFixed(2)},
+  hipX: ${params.hipX.toFixed(2)},
+  hipY: ${params.hipY.toFixed(2)},
+  hipZ: ${params.hipZ.toFixed(2)},
+  lThighY: ${params.lThighY.toFixed(2)},
+  lThighZ: ${params.lThighZ.toFixed(2)},
+  rThighY: ${params.rThighY.toFixed(2)},
+  rThighZ: ${params.rThighZ.toFixed(2)},
+  headZ: ${params.headZ.toFixed(2)},
+  rHandY: ${params.rHandY.toFixed(2)},
+  lHandY: ${params.lHandY.toFixed(2)},
+};`;
+          navigator.clipboard.writeText(code).then(() => {
+            copyCrashParamsBtn.textContent = "Copied!";
+            setTimeout(() => {
+              copyCrashParamsBtn.textContent = "Copy Parameters";
+            }, 2000);
+          });
+        });
       }
 
       function updateBoneSlider(boneName, axis) {
@@ -1684,6 +2085,170 @@ controls.update();`;
         }
       }
 
+      function startCrashAnimation() {
+        if (!boneParams.L_Thigh || !boneParams.R_Thigh || !boneParams.Head)
+          return;
+
+        // Store base values (current position)
+        if (boneParams.Pelvis) crashBaseValues.pelvisZ = boneParams.Pelvis.z;
+        if (boneParams.Hip) {
+          crashBaseValues.hipX = boneParams.Hip.x;
+          crashBaseValues.hipY = boneParams.Hip.y;
+          crashBaseValues.hipZ = boneParams.Hip.z;
+        }
+        crashBaseValues.lThighY = boneParams.L_Thigh.y;
+        crashBaseValues.lThighZ = boneParams.L_Thigh.z;
+        crashBaseValues.rThighY = boneParams.R_Thigh.y;
+        crashBaseValues.rThighZ = boneParams.R_Thigh.z;
+        crashBaseValues.headZ = boneParams.Head.z;
+        if (boneParams.R_Hand) crashBaseValues.rHandY = boneParams.R_Hand.y;
+        if (boneParams.L_Hand) crashBaseValues.lHandY = boneParams.L_Hand.y;
+
+        isCrashing = true;
+        crashTime = 0;
+        document.getElementById("test-crash").textContent = "Animating...";
+      }
+
+      function resetCrashAnimation() {
+        if (!boneParams.L_Thigh || !boneParams.R_Thigh || !boneParams.Head)
+          return;
+
+        // Reset to base values
+        if (boneParams.Pelvis) {
+          boneParams.Pelvis.z = crashBaseValues.pelvisZ;
+          updateBoneRotation("Pelvis");
+          updateBoneSlider("Pelvis", "Z");
+        }
+        if (boneParams.Hip) {
+          boneParams.Hip.x = crashBaseValues.hipX;
+          boneParams.Hip.y = crashBaseValues.hipY;
+          boneParams.Hip.z = crashBaseValues.hipZ;
+          updateBoneRotation("Hip");
+          updateBoneSlider("Hip", "X");
+          updateBoneSlider("Hip", "Y");
+          updateBoneSlider("Hip", "Z");
+        }
+        boneParams.L_Thigh.y = crashBaseValues.lThighY;
+        boneParams.L_Thigh.z = crashBaseValues.lThighZ;
+        boneParams.R_Thigh.y = crashBaseValues.rThighY;
+        boneParams.R_Thigh.z = crashBaseValues.rThighZ;
+        boneParams.Head.z = crashBaseValues.headZ;
+        if (boneParams.R_Hand) boneParams.R_Hand.y = crashBaseValues.rHandY;
+        if (boneParams.L_Hand) boneParams.L_Hand.y = crashBaseValues.lHandY;
+
+        updateBoneRotation("L_Thigh");
+        updateBoneRotation("R_Thigh");
+        updateBoneRotation("Head");
+        if (boneParams.R_Hand) updateBoneRotation("R_Hand");
+        if (boneParams.L_Hand) updateBoneRotation("L_Hand");
+
+        updateBoneSlider("L_Thigh", "Y");
+        updateBoneSlider("L_Thigh", "Z");
+        updateBoneSlider("R_Thigh", "Y");
+        updateBoneSlider("R_Thigh", "Z");
+        updateBoneSlider("Head", "Z");
+        if (boneParams.R_Hand) updateBoneSlider("R_Hand", "Y");
+        if (boneParams.L_Hand) updateBoneSlider("L_Hand", "Y");
+
+        isCrashing = false;
+        crashTime = 0;
+        document.getElementById("test-crash").textContent =
+          "Test Crash Animation";
+      }
+
+      function updateCrashAnimation(deltaTime) {
+        if (!isCrashing) return;
+
+        crashTime += deltaTime * crashAnimationSpeed;
+        const crashUpDuration = 0.3; // Time to go from base to crash position
+        const crashDownDuration = 0.3; // Time to go from crash back to base
+        const totalDuration = crashUpDuration + crashDownDuration;
+
+        let progress = 0;
+        if (crashTime < crashUpDuration) {
+          const t = crashTime / crashUpDuration;
+          progress = 1 - (1 - t) * (1 - t);
+        } else if (crashTime < totalDuration) {
+          const t = (crashTime - crashUpDuration) / crashDownDuration;
+          progress = 1 - t * t;
+        } else {
+          resetCrashAnimation();
+          return;
+        }
+
+        if (boneParams.Pelvis && skierBones.Pelvis) {
+          boneParams.Pelvis.z =
+            crashBaseValues.pelvisZ +
+            (crashAnimationParams.pelvisZ - crashBaseValues.pelvisZ) * progress;
+          updateBoneRotation("Pelvis");
+          updateBoneSlider("Pelvis", "Z");
+        }
+
+        if (boneParams.Hip && skierBones.Hip) {
+          boneParams.Hip.x =
+            crashBaseValues.hipX +
+            (crashAnimationParams.hipX - crashBaseValues.hipX) * progress;
+          boneParams.Hip.y =
+            crashBaseValues.hipY +
+            (crashAnimationParams.hipY - crashBaseValues.hipY) * progress;
+          boneParams.Hip.z =
+            crashBaseValues.hipZ +
+            (crashAnimationParams.hipZ - crashBaseValues.hipZ) * progress;
+          updateBoneRotation("Hip");
+          updateBoneSlider("Hip", "X");
+          updateBoneSlider("Hip", "Y");
+          updateBoneSlider("Hip", "Z");
+        }
+
+        if (boneParams.L_Thigh && skierBones.L_Thigh) {
+          boneParams.L_Thigh.y =
+            crashBaseValues.lThighY +
+            (crashAnimationParams.lThighY - crashBaseValues.lThighY) * progress;
+          boneParams.L_Thigh.z =
+            crashBaseValues.lThighZ +
+            (crashAnimationParams.lThighZ - crashBaseValues.lThighZ) * progress;
+          updateBoneRotation("L_Thigh");
+          updateBoneSlider("L_Thigh", "Y");
+          updateBoneSlider("L_Thigh", "Z");
+        }
+
+        if (boneParams.R_Thigh && skierBones.R_Thigh) {
+          boneParams.R_Thigh.y =
+            crashBaseValues.rThighY +
+            (crashAnimationParams.rThighY - crashBaseValues.rThighY) * progress;
+          boneParams.R_Thigh.z =
+            crashBaseValues.rThighZ +
+            (crashAnimationParams.rThighZ - crashBaseValues.rThighZ) * progress;
+          updateBoneRotation("R_Thigh");
+          updateBoneSlider("R_Thigh", "Y");
+          updateBoneSlider("R_Thigh", "Z");
+        }
+
+        if (boneParams.Head && skierBones.Head) {
+          boneParams.Head.z =
+            crashBaseValues.headZ +
+            (crashAnimationParams.headZ - crashBaseValues.headZ) * progress;
+          updateBoneRotation("Head");
+          updateBoneSlider("Head", "Z");
+        }
+
+        if (boneParams.R_Hand && skierBones.R_Hand) {
+          boneParams.R_Hand.y =
+            crashBaseValues.rHandY +
+            (crashAnimationParams.rHandY - crashBaseValues.rHandY) * progress;
+          updateBoneRotation("R_Hand");
+          updateBoneSlider("R_Hand", "Y");
+        }
+
+        if (boneParams.L_Hand && skierBones.L_Hand) {
+          boneParams.L_Hand.y =
+            crashBaseValues.lHandY +
+            (crashAnimationParams.lHandY - crashBaseValues.lHandY) * progress;
+          updateBoneRotation("L_Hand");
+          updateBoneSlider("L_Hand", "Y");
+        }
+      }
+
       function animate() {
         requestAnimationFrame(animate);
 
@@ -1692,6 +2257,7 @@ controls.update();`;
         updateJumpAnimation(deltaTime);
         updateRightTurnAnimation(deltaTime);
         updateLeftTurnAnimation(deltaTime);
+        updateCrashAnimation(deltaTime);
 
         controls.update();
         renderer.render(scene, camera);
