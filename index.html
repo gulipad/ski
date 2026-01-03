@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Alpine Rush: Pro Edition</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+      /* CSS Reset */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        touch-action: none;
+        user-select: none;
+      }
+
+      body {
+        overflow: hidden;
+        background: linear-gradient(to bottom, #87ceeb, #e0f7fa);
+        font-family: "Segoe UI", monospace;
+      }
+
+      /* UI Layer */
+      #ui-layer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 20px;
+      }
+
+      #score-board {
+        text-align: center;
+        color: #333;
+        text-shadow: 0 0 2px white;
+      }
+
+      #score {
+        font-size: 3rem;
+        font-weight: 800;
+        color: #2c3e50;
+      }
+
+      #label {
+        font-size: 1rem;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        color: #555;
+        font-weight: bold;
+      }
+
+      /* Debug Panel */
+      #debug-panel {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 280px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        border-radius: 8px;
+        pointer-events: auto;
+        font-size: 0.9rem;
+        z-index: 100;
+        overflow: hidden;
+        transition: height 0.3s ease;
+      }
+
+      #debug-header {
+        padding: 15px;
+        background: rgba(255, 255, 255, 0.1);
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        user-select: none;
+      }
+
+      #debug-header h3 {
+        margin: 0;
+        color: #f1c40f;
+        font-size: 1rem;
+      }
+
+      #debug-content {
+        padding: 15px;
+        display: block;
+      }
+
+      #debug-panel.collapsed #debug-content {
+        display: none;
+      }
+
+      .control-group {
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .control-group label {
+        width: 60px;
+      }
+      .control-group input {
+        width: 140px;
+      }
+      .control-group span {
+        width: 40px;
+        text-align: right;
+        font-size: 0.8rem;
+        color: #ccc;
+      }
+
+      #camera-readout {
+        margin-top: 15px;
+        padding-top: 10px;
+        border-top: 1px solid #555;
+        font-size: 0.75rem;
+        line-height: 1.4;
+        color: #87ceeb;
+        user-select: text;
+      }
+
+      /* Crash Effect */
+      #crash-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: red;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.1s;
+        mix-blend-mode: overlay;
+      }
+
+      #jump-msg {
+        position: absolute;
+        top: 40%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: #f1c40f;
+        font-weight: 900;
+        font-size: 2rem;
+        text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.2);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="crash-overlay"></div>
+    <div id="jump-msg">JUMP!</div>
+
+    <!-- Debug Panel -->
+    <div id="debug-panel" class="collapsed">
+      <!-- Default to collapsed -->
+      <div id="debug-header">
+        <h3>Camera Controls</h3>
+        <span id="toggle-icon">▼</span>
+      </div>
+      <div id="debug-content">
+        <div class="control-group">
+          <label>Pos Y</label>
+          <input type="range" id="camY" min="50" max="200" step="1" />
+          <span id="valY">0</span>
+        </div>
+        <div class="control-group">
+          <label>Pos Z</label>
+          <input type="range" id="camZ" min="0" max="100" step="1" />
+          <span id="valZ">0</span>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid #555; margin: 10px 0" />
+
+        <div class="control-group">
+          <label>Look Y</label>
+          <input type="range" id="lookY" min="0" max="150" step="1" />
+          <span id="valLookY">0</span>
+        </div>
+        <div class="control-group">
+          <label>Look Z</label>
+          <input type="range" id="lookZ" min="-50" max="50" step="1" />
+          <span id="valLookZ">0</span>
+        </div>
+
+        <div class="control-group">
+          <label>FOV</label>
+          <input type="range" id="camFov" min="10" max="120" step="1" />
+          <span id="valFov">0</span>
+        </div>
+
+        <div id="camera-readout">Values will appear here...</div>
+      </div>
+    </div>
+
+    <div id="ui-layer">
+      <div id="score-board">
+        <div id="score">0</div>
+        <div id="label">Meters</div>
+      </div>
+    </div>
+
+    <script>
+      // --- CONFIGURATION ---
+      const CONFIG = {
+        baseSpeed: 0.003,
+        maxSpeed: 0.003,
+        turnSpeed: 0.25,
+        worldRadius: 100,
+        spawnInterval: 0.18,
+        boundaryInterval: 0.08,
+        laneWidth: 5,
+        gravity: 0.06, // Slightly higher gravity for snappier jumps
+        jumpStrength: 0.9, // Lower jump (was 1.2)
+        fogColor: 0x87ceeb,
+        groundColor: 0xffffff,
+      };
+
+      // --- GLOBAL VARIABLES ---
+      let scene, camera, renderer;
+      let player, playerGroup;
+      let worldSphere;
+      let particlesSystem;
+
+      let gameActive = true;
+      let score = 0;
+      let currentRotationSpeed = CONFIG.baseSpeed;
+
+      let currentLane = 0;
+      let targetX = 0;
+
+      let isJumping = false;
+      let verticalVelocity = 0;
+      let playerHeight = 0;
+
+      let lastSpawnRotation = 0;
+      let lastBoundaryRotation = 0;
+      let boundaryAlternator = 0;
+
+      let activeObstacles = [];
+      let activeBarriers = [];
+      let activeBoundaries = [];
+
+      // Camera State (User Values applied here)
+      let camParams = {
+        y: 112,
+        z: 33,
+        lookY: 90,
+        lookZ: -13,
+        fov: 44,
+      };
+
+      // --- HELPER: TEXTURES ---
+      function getParticleTexture() {
+        const canvas = document.createElement("canvas");
+        canvas.width = 32;
+        canvas.height = 32;
+        const ctx = canvas.getContext("2d");
+        const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+        gradient.addColorStop(0, "rgba(255, 255, 255, 1)");
+        gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 32, 32);
+        return new THREE.CanvasTexture(canvas);
+      }
+
+      // --- INITIALIZATION ---
+      function init() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(CONFIG.fogColor);
+        scene.fog = new THREE.Fog(CONFIG.fogColor, 60, 120);
+
+        camera = new THREE.PerspectiveCamera(
+          camParams.fov,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          300
+        );
+        updateCamera();
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(20, 80, 50);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+
+        const sphereGeo = new THREE.SphereGeometry(CONFIG.worldRadius, 64, 64);
+        const sphereMat = new THREE.MeshLambertMaterial({
+          color: CONFIG.groundColor,
+        });
+        worldSphere = new THREE.Mesh(sphereGeo, sphereMat);
+        worldSphere.receiveShadow = true;
+        scene.add(worldSphere);
+
+        createPlayer();
+        createParticleSystem();
+
+        window.addEventListener("resize", onWindowResize, false);
+        document.addEventListener("keydown", onKeyDown, false);
+        setupSwipeControls();
+        setupDebugControls();
+
+        // Initial Objects
+        // Spawn ahead of player so they are visible immediately
+        for (let i = 0; i < 30; i++) {
+          // Spawn angle: 0.5 down to -1.0 (covering visible range)
+          let angle = 0.5 - i * 0.05;
+          spawnTree(angle, true);
+          spawnBoundary(angle);
+        }
+
+        animate();
+      }
+
+      function setupDebugControls() {
+        const header = document.getElementById("debug-header");
+        const panel = document.getElementById("debug-panel");
+        const icon = document.getElementById("toggle-icon");
+
+        header.addEventListener("click", () => {
+          panel.classList.toggle("collapsed");
+          icon.innerText = panel.classList.contains("collapsed") ? "▼" : "▲";
+        });
+
+        document.getElementById("camY").value = camParams.y;
+        document.getElementById("camZ").value = camParams.z;
+        document.getElementById("lookY").value = camParams.lookY;
+        document.getElementById("lookZ").value = camParams.lookZ;
+        document.getElementById("camFov").value = camParams.fov;
+
+        updateDebugDisplay();
+
+        const inputs = ["camY", "camZ", "lookY", "lookZ", "camFov"];
+        inputs.forEach((id) => {
+          document.getElementById(id).addEventListener("input", (e) => {
+            const val = parseFloat(e.target.value);
+            if (id === "camY") camParams.y = val;
+            if (id === "camZ") camParams.z = val;
+            if (id === "lookY") camParams.lookY = val;
+            if (id === "lookZ") camParams.lookZ = val;
+            if (id === "camFov") camParams.fov = val;
+            updateCamera();
+            updateDebugDisplay();
+          });
+        });
+      }
+
+      function updateCamera() {
+        camera.position.set(0, camParams.y, camParams.z);
+        camera.lookAt(0, camParams.lookY, camParams.lookZ);
+        camera.fov = camParams.fov;
+        camera.updateProjectionMatrix();
+      }
+
+      function updateDebugDisplay() {
+        document.getElementById("valY").innerText = camParams.y;
+        document.getElementById("valZ").innerText = camParams.z;
+        document.getElementById("valLookY").innerText = camParams.lookY;
+        document.getElementById("valLookZ").innerText = camParams.lookZ;
+        document.getElementById("valFov").innerText = camParams.fov;
+
+        const txt = `
+camera.position.set(0, ${camParams.y}, ${camParams.z});<br>
+camera.lookAt(0, ${camParams.lookY}, ${camParams.lookZ});<br>
+fov: ${camParams.fov}
+            `;
+        document.getElementById("camera-readout").innerHTML = txt;
+      }
+
+      function createPlayer() {
+        playerGroup = new THREE.Group();
+
+        const skinMat = new THREE.MeshLambertMaterial({ color: 0xffccaa });
+        const suitMat = new THREE.MeshLambertMaterial({ color: 0xe67e22 });
+        const skiMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+        const goggleMat = new THREE.MeshLambertMaterial({
+          color: 0x3498db,
+          shininess: 100,
+        });
+
+        const body = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.5, 0.3, 1.5, 8),
+          suitMat
+        );
+        body.position.y = 0.75;
+        body.castShadow = true;
+        playerGroup.add(body);
+
+        const head = new THREE.Mesh(
+          new THREE.SphereGeometry(0.4, 16, 16),
+          skinMat
+        );
+        head.position.y = 1.7;
+        head.castShadow = true;
+        playerGroup.add(head);
+
+        const helmet = new THREE.Mesh(
+          new THREE.SphereGeometry(
+            0.42,
+            16,
+            16,
+            0,
+            Math.PI * 2,
+            0,
+            Math.PI * 0.5
+          ),
+          new THREE.MeshLambertMaterial({ color: 0xecf0f1 })
+        );
+        helmet.position.y = 1.7;
+        playerGroup.add(helmet);
+
+        const goggles = new THREE.Mesh(
+          new THREE.BoxGeometry(0.6, 0.25, 0.3),
+          goggleMat
+        );
+        goggles.position.set(0, 1.7, 0.25);
+        playerGroup.add(goggles);
+
+        const scarf = new THREE.Mesh(
+          new THREE.BoxGeometry(0.6, 0.2, 0.6),
+          new THREE.MeshLambertMaterial({ color: 0xe74c3c })
+        );
+        scarf.position.set(0, 1.4, 0);
+        playerGroup.add(scarf);
+
+        const skiGeo = new THREE.BoxGeometry(0.3, 0.1, 2.5);
+        const skiL = new THREE.Mesh(skiGeo, skiMat);
+        skiL.position.set(-0.4, 0.05, 0);
+        skiL.castShadow = true;
+        playerGroup.add(skiL);
+
+        const skiR = new THREE.Mesh(skiGeo, skiMat);
+        skiR.position.set(0.4, 0.05, 0);
+        skiR.castShadow = true;
+        playerGroup.add(skiR);
+
+        playerGroup.position.set(0, CONFIG.worldRadius, 0);
+        scene.add(playerGroup);
+        player = playerGroup;
+      }
+
+      function createParticleSystem() {
+        const particleCount = 250;
+        const particles = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        const velocities = [];
+
+        for (let i = 0; i < particleCount; i++) {
+          positions[i * 3] = 0;
+          positions[i * 3 + 1] = -500;
+          positions[i * 3 + 2] = 0;
+          velocities.push({
+            x: (Math.random() - 0.5) * 0.2,
+            y: Math.random() * 0.2,
+            z: -Math.random() * 0.5,
+          });
+        }
+
+        particles.setAttribute(
+          "position",
+          new THREE.BufferAttribute(positions, 3)
+        );
+
+        const pMaterial = new THREE.PointsMaterial({
+          color: 0xffffff,
+          size: 0.8,
+          map: getParticleTexture(),
+          transparent: true,
+          opacity: 0.8,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        });
+
+        particlesSystem = new THREE.Points(particles, pMaterial);
+        scene.add(particlesSystem);
+        particlesSystem.userData = { velocities: velocities };
+      }
+
+      function updateParticles() {
+        const positions = particlesSystem.geometry.attributes.position.array;
+        const velocities = particlesSystem.userData.velocities;
+
+        if (gameActive && currentRotationSpeed > 0.001) {
+          const index = Math.floor(Math.random() * 200);
+          if (!isJumping) {
+            positions[index * 3] = player.position.x + (Math.random() - 0.5);
+            positions[index * 3 + 1] = CONFIG.worldRadius;
+            positions[index * 3 + 2] = -1.5;
+          }
+        }
+
+        for (let i = 0; i < 200; i++) {
+          positions[i * 3] += velocities[i].x;
+          positions[i * 3 + 1] += velocities[i].y;
+          positions[i * 3 + 2] += velocities[i].z;
+
+          if (positions[i * 3 + 1] > 0) positions[i * 3 + 1] -= 0.1;
+          if (positions[i * 3 + 1] < CONFIG.worldRadius - 5)
+            positions[i * 3 + 1] = -500;
+        }
+        particlesSystem.geometry.attributes.position.needsUpdate = true;
+      }
+
+      function placeOnSphere(obj, angleRad, xOffset) {
+        const R = CONFIG.worldRadius;
+        const y = R * Math.cos(angleRad);
+        const z = R * Math.sin(angleRad);
+
+        obj.position.set(xOffset, y, z);
+        obj.rotation.x = angleRad;
+
+        worldSphere.add(obj);
+      }
+
+      // --- ASSETS ---
+      const treeGeo = new THREE.ConeGeometry(1.5, 4, 8);
+      const trunkGeo = new THREE.CylinderGeometry(0.4, 0.4, 1, 8);
+      const treeMat = new THREE.MeshLambertMaterial({ color: 0x27ae60 });
+      const trunkMat = new THREE.MeshLambertMaterial({ color: 0x5d4037 });
+      const snowMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+
+      function spawnTree(angle, isDecoration = false, laneIndex = 0) {
+        const treeGroup = new THREE.Group();
+
+        const leaves = new THREE.Mesh(treeGeo, treeMat);
+        leaves.position.y = 2.0;
+        leaves.castShadow = true;
+        treeGroup.add(leaves);
+
+        const cap = new THREE.Mesh(
+          new THREE.ConeGeometry(1.0, 1.5, 8),
+          snowMat
+        );
+        cap.position.y = 3.3;
+        treeGroup.add(cap);
+
+        const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+        trunk.position.y = 0.5;
+        treeGroup.add(trunk);
+
+        let xPos;
+        if (isDecoration) {
+          const side = Math.random() > 0.5 ? 1 : -1;
+          xPos = side * (10 + Math.random() * 15);
+        } else {
+          const lane = laneIndex - 1;
+          xPos = lane * CONFIG.laneWidth;
+        }
+
+        placeOnSphere(treeGroup, angle, xPos);
+        activeObstacles.push({ mesh: treeGroup, angle: angle });
+      }
+
+      // NEW SMALLER BARRIER
+      const stickGeo = new THREE.CylinderGeometry(0.12, 0.12, 3.0, 8); // Shorter sticks
+      const barrierMat = new THREE.MeshLambertMaterial({ color: 0xe74c3c });
+
+      function spawnBarrier(angle, laneIndex) {
+        const lane = laneIndex - 1;
+        const xPos = lane * CONFIG.laneWidth;
+
+        const group = new THREE.Group();
+
+        const s1 = new THREE.Mesh(stickGeo, barrierMat);
+        s1.rotation.z = Math.PI / 4;
+        s1.position.y = 0.8; // Lower
+        s1.castShadow = true;
+        group.add(s1);
+
+        const s2 = new THREE.Mesh(stickGeo, barrierMat);
+        s2.rotation.z = -Math.PI / 4;
+        s2.position.y = 0.8; // Lower
+        s2.castShadow = true;
+        group.add(s2);
+
+        placeOnSphere(group, angle, xPos);
+        activeBarriers.push({ mesh: group, angle: angle, passed: false });
+      }
+
+      // --- NEW: BOUNDARY DECORATIONS (Flags/Fences) ---
+      const bFlagPoleGeo = new THREE.CylinderGeometry(0.1, 0.1, 2.5, 8);
+      const bFlagCanvasGeo = new THREE.PlaneGeometry(1.2, 0.8);
+      const bFlagRedMat = new THREE.MeshLambertMaterial({
+        color: 0xe74c3c,
+        side: THREE.DoubleSide,
+      });
+      const bFlagBlueMat = new THREE.MeshLambertMaterial({
+        color: 0x3498db,
+        side: THREE.DoubleSide,
+      });
+      const bFenceGeo = new THREE.BoxGeometry(3, 1.5, 0.2);
+      const bFenceMat = new THREE.MeshLambertMaterial({ color: 0x8d6e63 });
+
+      function spawnBoundary(angle) {
+        boundaryAlternator++;
+        const isFence = boundaryAlternator % 4 === 0;
+
+        const leftObj = createBoundaryObject(isFence, true);
+        placeOnSphere(leftObj, angle, -9);
+        activeBoundaries.push({ mesh: leftObj });
+
+        const rightObj = createBoundaryObject(isFence, false);
+        placeOnSphere(rightObj, angle, 9);
+        activeBoundaries.push({ mesh: rightObj });
+      }
+
+      function createBoundaryObject(isFence, isLeft) {
+        const group = new THREE.Group();
+
+        if (isFence) {
+          const fence = new THREE.Mesh(bFenceGeo, bFenceMat);
+          fence.position.y = 0.75;
+          fence.rotation.y = Math.PI / 2;
+          fence.castShadow = true;
+          group.add(fence);
+        } else {
+          const isRed = Math.floor(boundaryAlternator / 4) % 2 === 0;
+
+          const pole = new THREE.Mesh(
+            bFlagPoleGeo,
+            new THREE.MeshLambertMaterial({ color: 0x777777 })
+          );
+          pole.position.y = 1.25;
+          pole.castShadow = true;
+          group.add(pole);
+
+          const flag = new THREE.Mesh(
+            bFlagCanvasGeo,
+            isRed ? bFlagRedMat : bFlagBlueMat
+          );
+          flag.position.y = 1.8;
+          flag.position.x = isLeft ? 0.6 : -0.6;
+          group.add(flag);
+        }
+        return group;
+      }
+
+      // --- SPAWN LOGIC ---
+      function spawnRow(angle) {
+        const rand = Math.random();
+        const lanes = [0, 1, 2];
+        lanes.sort(() => Math.random() - 0.5);
+
+        if (rand < 0.5) {
+          spawnTree(angle, false, lanes[0]);
+        } else if (rand < 0.7) {
+          spawnTree(angle, false, lanes[0]);
+          spawnTree(angle, false, lanes[1]);
+        } else if (rand < 0.85) {
+          spawnBarrier(angle, lanes[0]);
+        } else {
+          spawnTree(angle, false, lanes[0]);
+          spawnBarrier(angle, lanes[1]);
+        }
+        // Always spawn a decoration tree further out
+        spawnTree(angle, true);
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+        if (gameActive) update();
+        renderer.render(scene, camera);
+      }
+
+      function update() {
+        const dx = targetX - player.position.x;
+        player.position.x += dx * CONFIG.turnSpeed;
+
+        if (isJumping) {
+          verticalVelocity -= CONFIG.gravity;
+          playerHeight += verticalVelocity;
+
+          if (playerHeight <= 0) {
+            playerHeight = 0;
+            isJumping = false;
+            verticalVelocity = 0;
+          }
+        }
+        player.position.y = CONFIG.worldRadius + playerHeight;
+
+        const leanAmount = isJumping ? 0.05 : 0.15;
+        player.rotation.z = -dx * leanAmount;
+        if (isJumping) player.rotation.x = -0.5;
+        else player.rotation.x = 0;
+
+        worldSphere.rotation.x -= currentRotationSpeed;
+        const totalRotation = -worldSphere.rotation.x;
+
+        score += currentRotationSpeed * 100;
+        document.getElementById("score").innerText = Math.floor(score);
+
+        checkCollisions();
+
+        // Spawn Obstacles
+        if (totalRotation - lastSpawnRotation > CONFIG.spawnInterval) {
+          // FIXED SPAWN ANGLE: 0.5 is closer to camera than 1.5.
+          // 1.5 was spawning behind the new cleanup threshold.
+          const spawnAngle = -worldSphere.rotation.x + 0.5;
+          spawnRow(spawnAngle);
+          lastSpawnRotation = totalRotation;
+        }
+
+        // Spawn Boundaries
+        if (totalRotation - lastBoundaryRotation > CONFIG.boundaryInterval) {
+          const bAngle = -worldSphere.rotation.x + 0.5;
+          spawnBoundary(bAngle);
+          lastBoundaryRotation = totalRotation;
+        }
+
+        updateParticles();
+        cleanupObjects();
+      }
+
+      function cleanupObjects() {
+        // FIXED CLEANUP: Only remove when they go over horizon (Z < -60)
+        const cleanupList = [activeObstacles, activeBarriers, activeBoundaries];
+
+        cleanupList.forEach((list) => {
+          for (let i = list.length - 1; i >= 0; i--) {
+            const obj = list[i];
+            const oPos = new THREE.Vector3();
+            obj.mesh.getWorldPosition(oPos);
+
+            if (oPos.z < -60) {
+              worldSphere.remove(obj.mesh);
+              list.splice(i, 1);
+            }
+          }
+        });
+      }
+
+      function checkCollisions() {
+        const pPos = new THREE.Vector3();
+        player.getWorldPosition(pPos);
+
+        // Trees
+        for (let i = activeObstacles.length - 1; i >= 0; i--) {
+          const obj = activeObstacles[i];
+          const oPos = new THREE.Vector3();
+          obj.mesh.getWorldPosition(oPos);
+
+          if (Math.abs(oPos.z - pPos.z) < 1.5) {
+            if (Math.abs(oPos.x - pPos.x) < 1.5) {
+              triggerCrash();
+            }
+          }
+        }
+
+        // Barriers
+        for (let i = activeBarriers.length - 1; i >= 0; i--) {
+          const obj = activeBarriers[i];
+          const oPos = new THREE.Vector3();
+          obj.mesh.getWorldPosition(oPos);
+
+          if (!obj.passed && Math.abs(oPos.z - pPos.z) < 1.0) {
+            if (Math.abs(oPos.x - pPos.x) < 2.0) {
+              // Easier to jump over: > 1.0 height required
+              if (playerHeight > 1.0) {
+                obj.passed = true;
+                showJumpMsg();
+                score += 500;
+              } else {
+                triggerCrash();
+              }
+            }
+          }
+        }
+      }
+
+      function triggerCrash() {
+        const overlay = document.getElementById("crash-overlay");
+        overlay.style.opacity = 0.5;
+        setTimeout(() => {
+          overlay.style.opacity = 0;
+        }, 100);
+      }
+
+      function showJumpMsg() {
+        const msg = document.getElementById("jump-msg");
+        msg.style.opacity = 1;
+        msg.style.top = "30%";
+        setTimeout(() => {
+          msg.style.opacity = 0;
+          msg.style.top = "40%";
+        }, 500);
+      }
+
+      function resetGame() {
+        activeObstacles.forEach((o) => worldSphere.remove(o.mesh));
+        activeBarriers.forEach((o) => worldSphere.remove(o.mesh));
+        activeBoundaries.forEach((o) => worldSphere.remove(o.mesh));
+        activeObstacles = [];
+        activeBarriers = [];
+        activeBoundaries = [];
+
+        player.position.x = 0;
+        targetX = 0;
+        currentLane = 0;
+        score = 0;
+        currentRotationSpeed = CONFIG.baseSpeed;
+        worldSphere.rotation.x = 0;
+        lastSpawnRotation = 0;
+        lastBoundaryRotation = 0;
+
+        for (let i = 0; i < 30; i++) {
+          let angle = 0.5 - i * 0.05;
+          spawnTree(angle, true);
+          spawnBoundary(angle);
+        }
+      }
+
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      function moveLane(direction) {
+        if (!gameActive) return;
+        currentLane += direction;
+        if (currentLane < -1) currentLane = -1;
+        if (currentLane > 1) currentLane = 1;
+        targetX = currentLane * CONFIG.laneWidth;
+      }
+
+      function jump() {
+        if (!gameActive) return;
+        if (!isJumping) {
+          isJumping = true;
+          verticalVelocity = CONFIG.jumpStrength;
+        }
+      }
+
+      function onKeyDown(event) {
+        if (event.key === "ArrowLeft" || event.key === "a") moveLane(-1);
+        if (event.key === "ArrowRight" || event.key === "d") moveLane(1);
+        if (event.key === "ArrowUp" || event.key === " " || event.key === "w")
+          jump();
+      }
+
+      function setupSwipeControls() {
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchEndX = 0;
+        let touchEndY = 0;
+
+        document.addEventListener(
+          "touchstart",
+          (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+          },
+          { passive: false }
+        );
+
+        document.addEventListener(
+          "touchend",
+          (e) => {
+            touchEndX = e.changedTouches[0].screenX;
+            touchEndY = e.changedTouches[0].screenY;
+            handleSwipe();
+          },
+          { passive: false }
+        );
+
+        function handleSwipe() {
+          const dx = touchEndX - touchStartX;
+          const dy = touchEndY - touchStartY;
+
+          if (Math.abs(dx) > Math.abs(dy)) {
+            if (Math.abs(dx) > 40) {
+              if (dx < 0) moveLane(-1);
+              else moveLane(1);
+            }
+          } else {
+            if (dy < -40) {
+              jump();
+            }
+          }
+        }
+      }
+
+      init();
+    </script>
+  </body>
+</html>
