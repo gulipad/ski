@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Skier Pose Editor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", monospace;
+        background: #1a1a1a;
+        color: white;
+        overflow: hidden;
+      }
+
+      #canvas-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      #controls-panel {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 350px;
+        max-height: 90vh;
+        background: rgba(0, 0, 0, 0.9);
+        border-radius: 8px;
+        padding: 15px;
+        overflow-y: auto;
+        z-index: 100;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      }
+
+      #controls-panel h2 {
+        color: #f1c40f;
+        margin-bottom: 15px;
+        font-size: 1.2rem;
+      }
+
+      .control-group {
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .control-group label {
+        width: 70px;
+        font-size: 0.85rem;
+      }
+
+      .control-group input[type="range"] {
+        width: 150px;
+      }
+
+      .control-group span {
+        width: 50px;
+        text-align: right;
+        font-size: 0.8rem;
+        color: #87ceeb;
+      }
+
+      .bone-section {
+        margin-top: 20px;
+        padding-top: 15px;
+        border-top: 1px solid #444;
+      }
+
+      .bone-title {
+        font-size: 0.9rem;
+        color: #f1c40f;
+        margin-bottom: 8px;
+        font-weight: bold;
+      }
+
+      button {
+        width: 100%;
+        padding: 10px;
+        margin: 10px 0;
+        background: #27ae60;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: bold;
+        transition: background 0.2s;
+      }
+
+      button:hover {
+        background: #229954;
+      }
+
+      button.secondary {
+        background: #3498db;
+      }
+
+      button.secondary:hover {
+        background: #2980b9;
+      }
+
+      #pose-output {
+        margin-top: 20px;
+        padding: 15px;
+        background: rgba(52, 152, 219, 0.1);
+        border-radius: 4px;
+        border: 1px solid #3498db;
+      }
+
+      #pose-output h3 {
+        color: #3498db;
+        margin-bottom: 10px;
+        font-size: 1rem;
+      }
+
+      #pose-code {
+        font-family: "Courier New", monospace;
+        font-size: 0.75rem;
+        line-height: 1.6;
+        color: #87ceeb;
+        white-space: pre-wrap;
+        word-break: break-all;
+        user-select: all;
+        max-height: 300px;
+        overflow-y: auto;
+        padding: 10px;
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 4px;
+      }
+
+      #loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 1.2rem;
+        color: #87ceeb;
+      }
+
+      .info-text {
+        font-size: 0.8rem;
+        color: #95a5a6;
+        margin-top: 10px;
+        line-height: 1.4;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading">Loading skier model...</div>
+    <div id="canvas-container"></div>
+
+    <div id="controls-panel">
+      <h2>Skier Pose Editor</h2>
+
+      <button id="apply-skiing-pose">Apply Skiing Pose</button>
+      <button id="reset-pose" class="secondary">Reset to Default</button>
+      <button id="copy-pose" class="secondary">Copy Pose Code</button>
+
+      <div class="info-text">
+        Use mouse to rotate/zoom the camera. Adjust bones below to pose the
+        skier.
+      </div>
+
+      <div id="bone-controls"></div>
+
+      <div id="pose-output" style="display: none">
+        <h3>Pose Values:</h3>
+        <div id="pose-code"></div>
+      </div>
+    </div>
+
+    <script>
+      // Scene setup
+      let scene, camera, renderer, controls;
+      let skierModel;
+      let skierBones = {};
+      let boneParams = {};
+      let skierBaseOffset = { x: 0, y: 0, z: 0 };
+
+      // Initialize scene
+      function init() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x2c3e50);
+
+        camera = new THREE.PerspectiveCamera(
+          50,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          1000
+        );
+        camera.position.set(0, 5, 15);
+        camera.lookAt(0, 0, 0);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document
+          .getElementById("canvas-container")
+          .appendChild(renderer.domElement);
+
+        // Orbit controls for camera
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 5;
+        controls.maxDistance = 50;
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        const fillLight = new THREE.DirectionalLight(0x87ceeb, 0.4);
+        fillLight.position.set(-10, 10, -10);
+        scene.add(fillLight);
+
+        // Grid helper
+        const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+        scene.add(gridHelper);
+
+        // Load skier model
+        loadSkierModel();
+
+        // Handle window resize
+        window.addEventListener("resize", onWindowResize);
+
+        // Setup buttons
+        document
+          .getElementById("apply-skiing-pose")
+          .addEventListener("click", applySkiingPose);
+        document
+          .getElementById("reset-pose")
+          .addEventListener("click", resetPose);
+        document
+          .getElementById("copy-pose")
+          .addEventListener("click", copyPoseCode);
+
+        animate();
+      }
+
+      function loadSkierModel() {
+        const loader = new THREE.GLTFLoader();
+        loader.load(
+          "/assets/models/skier_v1.glb",
+          (gltf) => {
+            skierModel = gltf.scene;
+
+            // Center the model
+            const box = new THREE.Box3().setFromObject(skierModel);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+
+            skierBaseOffset.x = -center.x;
+            skierBaseOffset.y = -box.min.y;
+            skierBaseOffset.z = -center.z;
+
+            skierModel.position.set(
+              skierBaseOffset.x,
+              skierBaseOffset.y,
+              skierBaseOffset.z
+            );
+
+            // Scale
+            skierModel.scale.set(3.9, 3.9, 3.9);
+
+            // Enable shadows and brighten materials
+            skierModel.traverse((child) => {
+              if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+
+                if (child.material) {
+                  if (child.material.metalness !== undefined) {
+                    child.material.metalness = Math.min(
+                      child.material.metalness,
+                      0.1
+                    );
+                    child.material.roughness = Math.max(
+                      child.material.roughness,
+                      0.8
+                    );
+                  }
+
+                  if (child.material.color) {
+                    child.material.color.multiplyScalar(1.5);
+                  }
+
+                  if (child.material.emissive) {
+                    child.material.emissive.setRGB(0.1, 0.1, 0.1);
+                    child.material.emissiveIntensity = 0.3;
+                  }
+
+                  child.material.needsUpdate = true;
+                }
+              }
+
+              // Store bones
+              if (child.isBone || child.type === "Bone") {
+                skierBones[child.name] = child;
+              }
+            });
+
+            // Check for skeleton
+            if (gltf.scene.children[0] && gltf.scene.children[0].skeleton) {
+              const skeleton = gltf.scene.children[0].skeleton;
+              skeleton.bones.forEach((bone) => {
+                skierBones[bone.name] = bone;
+              });
+            }
+
+            scene.add(skierModel);
+
+            // Initialize bone rotations
+            const boneNames = Object.keys(skierBones);
+            console.log("Total bones found:", boneNames.length);
+            console.log("Bone names:", boneNames);
+
+            if (boneNames.length > 0) {
+              boneNames.forEach((boneName) => {
+                const bone = skierBones[boneName];
+                if (bone) {
+                  const euler = new THREE.Euler().setFromQuaternion(
+                    bone.quaternion
+                  );
+                  boneParams[boneName] = {
+                    x: euler.x,
+                    y: euler.y,
+                    z: euler.z,
+                  };
+                }
+              });
+              setupBoneControls(boneNames);
+              document.getElementById("loading").style.display = "none";
+            }
+          },
+          (progress) => {
+            const percent = ((progress.loaded / progress.total) * 100).toFixed(
+              1
+            );
+            document.getElementById(
+              "loading"
+            ).textContent = `Loading skier model... ${percent}%`;
+          },
+          (error) => {
+            console.error("Error loading model:", error);
+            document.getElementById("loading").textContent =
+              "Error loading model!";
+          }
+        );
+      }
+
+      function setupBoneControls(boneNames) {
+        const boneControlsDiv = document.getElementById("bone-controls");
+
+        // Filter for main bones (skip twist bones)
+        const relevantBones = boneNames.filter((name) => {
+          const lower = name.toLowerCase();
+          return (
+            (lower.includes("arm") && !lower.includes("twist")) ||
+            (lower.includes("hand") && !lower.includes("twist")) ||
+            (lower.includes("thigh") && !lower.includes("twist")) ||
+            (lower.includes("calf") && !lower.includes("twist")) ||
+            (lower.includes("foot") && !lower.includes("twist")) ||
+            lower.includes("head") ||
+            lower.includes("neck") ||
+            lower.includes("clavicle") ||
+            lower.includes("spine") ||
+            lower.includes("waist") ||
+            lower.includes("pelvis") ||
+            lower.includes("hip")
+          );
+        });
+
+        const bonesToShow =
+          relevantBones.length > 0
+            ? relevantBones
+            : boneNames
+                .filter((n) => !n.toLowerCase().includes("twist"))
+                .slice(0, 15);
+
+        bonesToShow.forEach((boneName) => {
+          if (!boneParams[boneName]) {
+            boneParams[boneName] = { x: 0, y: 0, z: 0 };
+          }
+
+          const boneSection = document.createElement("div");
+          boneSection.className = "bone-section";
+
+          const boneTitle = document.createElement("div");
+          boneTitle.className = "bone-title";
+          boneTitle.textContent = boneName;
+          boneSection.appendChild(boneTitle);
+
+          ["X", "Y", "Z"].forEach((axis) => {
+            const controlGroup = document.createElement("div");
+            controlGroup.className = "control-group";
+
+            const label = document.createElement("label");
+            label.textContent = `Rot ${axis}`;
+            controlGroup.appendChild(label);
+
+            const input = document.createElement("input");
+            input.type = "range";
+            input.id = `bone_${boneName}_${axis}`;
+            input.min = "-1.57";
+            input.max = "1.57";
+            input.step = "0.05";
+            input.value = boneParams[boneName][axis.toLowerCase()];
+            controlGroup.appendChild(input);
+
+            const span = document.createElement("span");
+            span.id = `val_bone_${boneName}_${axis}`;
+            span.textContent =
+              boneParams[boneName][axis.toLowerCase()].toFixed(2);
+            controlGroup.appendChild(span);
+
+            boneSection.appendChild(controlGroup);
+
+            input.addEventListener("input", (e) => {
+              const val = parseFloat(e.target.value);
+              boneParams[boneName][axis.toLowerCase()] = val;
+              updateBoneRotation(boneName);
+              span.textContent = val.toFixed(2);
+              updatePoseOutput();
+            });
+          });
+
+          boneControlsDiv.appendChild(boneSection);
+        });
+
+        updatePoseOutput();
+      }
+
+      function updateBoneRotation(boneName) {
+        if (skierBones[boneName] && boneParams[boneName]) {
+          const bone = skierBones[boneName];
+          const params = boneParams[boneName];
+
+          const euler = new THREE.Euler(params.x, params.y, params.z, "XYZ");
+          bone.quaternion.setFromEuler(euler);
+
+          if (
+            skierModel &&
+            skierModel.children[0] &&
+            skierModel.children[0].skeleton
+          ) {
+            skierModel.children[0].skeleton.update();
+          }
+        }
+      }
+
+      function applySkiingPose() {
+        const skiingPose = {
+          Root: { x: -1.57, y: 0.0, z: 1.57 },
+          Hip: { x: 0.73, y: -0.83, z: -0.14 },
+          Pelvis: { x: -2.2, y: -0.65, z: -2.44 },
+          L_Thigh: { x: -3.06, y: 0.01, z: 0.6 },
+          L_Calf: { x: 0.01, y: -0.01, z: -0.96 },
+          L_Foot: { x: 1.02, y: 0.42, z: 1.5 },
+          L_CalfTwist01: { x: -0.0, y: 0.0, z: -0.0 },
+          L_CalfTwist02: { x: -0.0, y: 0.0, z: 0.0 },
+          L_ThighTwist01: { x: 0.0, y: 0.0, z: -0.0 },
+          L_ThighTwist02: { x: 0.0, y: -0.0, z: 0.0 },
+          R_Thigh: { x: -2.88, y: 0.03, z: 0.6 },
+          R_ThighTwist01: { x: 0.0, y: -0.0, z: -0.0 },
+          R_ThighTwist02: { x: -0.0, y: -0.0, z: 0.0 },
+          R_Calf: { x: -0.22, y: 0.11, z: -0.8 },
+          R_Foot: { x: 1.12, y: 0.31, z: 1.4 },
+          R_CalfTwist01: { x: 0.0, y: -0.0, z: 0.0 },
+          R_CalfTwist02: { x: -0.0, y: -0.0, z: 0.0 },
+          Waist: { x: -2.2, y: -0.65, z: -2.44 },
+          Spine01: { x: -0.0, y: -0.0, z: -0.0 },
+          Spine02: { x: 0.0, y: 0.0, z: 0.0 },
+          NeckTwist01: { x: 0.0, y: -0.0, z: -0.0 },
+          NeckTwist02: { x: 0.0, y: 0.0, z: 0.0 },
+          Head: { x: -0.0, y: -0.37, z: -0.0 },
+          L_Clavicle: { x: -2.37, y: -1.39, z: 2.39 },
+          L_Upperarm: { x: 0.36, y: -0.0, z: -1.03 },
+          L_Forearm: { x: 1.22, y: 0.99, z: -0.27 },
+          L_ForearmTwist01: { x: -0.0, y: -0.0, z: -0.0 },
+          L_ForearmTwist02: { x: 0.0, y: -0.0, z: 0.0 },
+          L_Hand: { x: -0.0, y: -0.0, z: 0.0 },
+          L_UpperarmTwist01: { x: 0.0, y: 0.0, z: -0.0 },
+          L_UpperarmTwist02: { x: 0.0, y: 0.0, z: 0.0 },
+          R_Clavicle: { x: -2.24, y: -1.41, z: -0.84 },
+          R_Upperarm: { x: -0.57, y: -0.11, z: 0.81 },
+          R_UpperarmTwist01: { x: -0.0, y: -0.0, z: -0.0 },
+          R_UpperarmTwist02: { x: -0.0, y: -0.0, z: 0.0 },
+          R_Forearm: { x: 0.97, y: -0.54, z: 0.66 },
+          R_ForearmTwist01: { x: 0.0, y: -0.0, z: 0.0 },
+          R_ForearmTwist02: { x: -0.0, y: 0.0, z: -0.0 },
+          R_Hand: { x: -0.0, y: -0.0, z: -0.0 },
+        };
+
+        Object.keys(skiingPose).forEach((boneName) => {
+          if (skierBones[boneName] && skiingPose[boneName]) {
+            const pose = skiingPose[boneName];
+            boneParams[boneName] = {
+              x: pose.x || 0,
+              y: pose.y || 0,
+              z: pose.z || 0,
+            };
+
+            updateBoneRotation(boneName);
+
+            ["X", "Y", "Z"].forEach((axis) => {
+              const input = document.getElementById(`bone_${boneName}_${axis}`);
+              const span = document.getElementById(
+                `val_bone_${boneName}_${axis}`
+              );
+              if (input && span) {
+                const val = boneParams[boneName][axis.toLowerCase()];
+                input.value = val;
+                span.textContent = val.toFixed(2);
+              }
+            });
+          }
+        });
+
+        updatePoseOutput();
+      }
+
+      function resetPose() {
+        Object.keys(boneParams).forEach((boneName) => {
+          boneParams[boneName] = { x: 0, y: 0, z: 0 };
+          updateBoneRotation(boneName);
+
+          ["X", "Y", "Z"].forEach((axis) => {
+            const input = document.getElementById(`bone_${boneName}_${axis}`);
+            const span = document.getElementById(
+              `val_bone_${boneName}_${axis}`
+            );
+            if (input && span) {
+              input.value = 0;
+              span.textContent = "0.00";
+            }
+          });
+        });
+
+        updatePoseOutput();
+      }
+
+      function updatePoseOutput() {
+        const outputDiv = document.getElementById("pose-output");
+        const codeDiv = document.getElementById("pose-code");
+
+        // Only show bones that have non-zero rotations
+        const activeBones = Object.keys(boneParams).filter((boneName) => {
+          const params = boneParams[boneName];
+          return params.x !== 0 || params.y !== 0 || params.z !== 0;
+        });
+
+        if (activeBones.length === 0) {
+          outputDiv.style.display = "none";
+          return;
+        }
+
+        outputDiv.style.display = "block";
+
+        let code = "const skiingPose = {\n";
+        activeBones.forEach((boneName, index) => {
+          const params = boneParams[boneName];
+          code += `  ${boneName}: { x: ${params.x.toFixed(
+            2
+          )}, y: ${params.y.toFixed(2)}, z: ${params.z.toFixed(2)} }`;
+          if (index < activeBones.length - 1) code += ",";
+          code += "\n";
+        });
+        code += "};";
+
+        codeDiv.textContent = code;
+      }
+
+      function copyPoseCode() {
+        const codeDiv = document.getElementById("pose-code");
+        const text = codeDiv.textContent;
+        navigator.clipboard.writeText(text).then(() => {
+          const btn = document.getElementById("copy-pose");
+          const originalText = btn.textContent;
+          btn.textContent = "Copied!";
+          btn.style.background = "#27ae60";
+          setTimeout(() => {
+            btn.textContent = originalText;
+            btn.style.background = "#3498db";
+          }, 2000);
+        });
+      }
+
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      init();
+    </script>
+  </body>
+</html>

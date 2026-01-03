@@ -8,6 +8,7 @@
     />
     <title>Alpine Rush: Pro Edition</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <style>
       /* CSS Reset */
       * {
@@ -74,6 +75,21 @@
         transition: height 0.3s ease;
       }
 
+      #skier-panel {
+        position: absolute;
+        top: 350px;
+        right: 10px;
+        width: 280px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        border-radius: 8px;
+        pointer-events: auto;
+        font-size: 0.9rem;
+        z-index: 100;
+        overflow: hidden;
+        transition: height 0.3s ease;
+      }
+
       #debug-header {
         padding: 15px;
         background: rgba(255, 255, 255, 0.1);
@@ -96,6 +112,10 @@
       }
 
       #debug-panel.collapsed #debug-content {
+        display: none;
+      }
+
+      #skier-panel.collapsed #skier-content {
         display: none;
       }
 
@@ -162,7 +182,7 @@
     <div id="crash-overlay"></div>
     <div id="jump-msg">JUMP!</div>
 
-    <!-- Debug Panel -->
+    <!-- Camera Debug Panel -->
     <div id="debug-panel" class="collapsed">
       <!-- Default to collapsed -->
       <div id="debug-header">
@@ -204,6 +224,129 @@
       </div>
     </div>
 
+    <!-- Skier Debug Panel -->
+    <div id="skier-panel">
+      <div id="skier-header">
+        <h3>Skier Controls</h3>
+        <span id="skier-toggle-icon">▲</span>
+      </div>
+      <div id="skier-content">
+        <div class="control-group">
+          <label>Scale</label>
+          <input type="range" id="skierScale" min="0.5" max="10" step="0.1" />
+          <span id="valSkierScale">3.0</span>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid #555; margin: 10px 0" />
+
+        <div class="control-group">
+          <label>Pos X</label>
+          <input type="range" id="skierX" min="-5" max="5" step="0.1" />
+          <span id="valSkierX">0</span>
+        </div>
+        <div class="control-group">
+          <label>Pos Y</label>
+          <input type="range" id="skierY" min="-5" max="5" step="0.1" />
+          <span id="valSkierY">0</span>
+        </div>
+        <div class="control-group">
+          <label>Pos Z</label>
+          <input type="range" id="skierZ" min="-5" max="5" step="0.1" />
+          <span id="valSkierZ">0</span>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid #555; margin: 10px 0" />
+
+        <div class="control-group">
+          <label>Rot X</label>
+          <input
+            type="range"
+            id="skierRotX"
+            min="-3.14"
+            max="3.14"
+            step="0.1"
+          />
+          <span id="valSkierRotX">0</span>
+        </div>
+        <div class="control-group">
+          <label>Rot Y</label>
+          <input
+            type="range"
+            id="skierRotY"
+            min="-3.14"
+            max="3.14"
+            step="0.1"
+          />
+          <span id="valSkierRotY">0</span>
+        </div>
+        <div class="control-group">
+          <label>Rot Z</label>
+          <input
+            type="range"
+            id="skierRotZ"
+            min="-3.14"
+            max="3.14"
+            step="0.1"
+          />
+          <span id="valSkierRotZ">0</span>
+        </div>
+
+        <div
+          id="skier-readout"
+          style="
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid #555;
+            font-size: 0.75rem;
+            line-height: 1.4;
+            color: #87ceeb;
+            user-select: text;
+          "
+        >
+          Values will appear here...
+        </div>
+
+        <div
+          id="bone-controls"
+          style="
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid #555;
+            display: none;
+          "
+        >
+          <div
+            style="
+              font-size: 0.85rem;
+              color: #f1c40f;
+              margin-bottom: 10px;
+              font-weight: bold;
+            "
+          >
+            Bone Controls
+          </div>
+          <button
+            id="apply-skiing-pose"
+            style="
+              width: 100%;
+              padding: 8px;
+              margin-bottom: 10px;
+              background: #27ae60;
+              color: white;
+              border: none;
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 0.85rem;
+              font-weight: bold;
+            "
+          >
+            Apply Skiing Pose
+          </button>
+          <div id="bone-controls-content"></div>
+        </div>
+      </div>
+    </div>
+
     <div id="ui-layer">
       <div id="score-board">
         <div id="score">0</div>
@@ -233,6 +376,13 @@
       let worldSphere;
       let particlesSystem;
 
+      // Animation
+      let mixer;
+      let clock = new THREE.Clock();
+      let skierModel;
+      let skierBaseOffset = { x: 0, y: 0, z: 0 };
+      let skierBones = {}; // Store bone references for manipulation
+
       let gameActive = true;
       let score = 0;
       let currentRotationSpeed = CONFIG.baseSpeed;
@@ -260,6 +410,20 @@
         lookZ: -13,
         fov: 44,
       };
+
+      // Skier Transform State
+      let skierParams = {
+        scale: 3.5,
+        posX: -0.2,
+        posY: 0.6,
+        posZ: -0.3,
+        rotX: 0.06,
+        rotY: 3.06,
+        rotZ: -0.04,
+      };
+
+      // Bone rotation state
+      let boneParams = {};
 
       // --- HELPER: TEXTURES ---
       function getParticleTexture() {
@@ -295,15 +459,30 @@
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
         scene.add(ambientLight);
 
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
         dirLight.position.set(20, 80, 50);
         dirLight.castShadow = true;
         dirLight.shadow.mapSize.width = 2048;
         dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 200;
+        dirLight.shadow.camera.left = -50;
+        dirLight.shadow.camera.right = 50;
+        dirLight.shadow.camera.top = 50;
+        dirLight.shadow.camera.bottom = -50;
         scene.add(dirLight);
+
+        // Add a subtle fill light from the front for better model visibility
+        const fillLight = new THREE.DirectionalLight(0x87ceeb, 0.4);
+        fillLight.position.set(0, 30, 100);
+        scene.add(fillLight);
+
+        // Add hemisphere light for natural sky/ground lighting
+        const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0xffffff, 0.3);
+        scene.add(hemiLight);
 
         const sphereGeo = new THREE.SphereGeometry(CONFIG.worldRadius, 64, 64);
         const sphereMat = new THREE.MeshLambertMaterial({
@@ -320,6 +499,7 @@
         document.addEventListener("keydown", onKeyDown, false);
         setupSwipeControls();
         setupDebugControls();
+        setupSkierControls();
 
         // Initial Objects
         // Spawn ahead of player so they are visible immediately
@@ -388,16 +568,472 @@ fov: ${camParams.fov}
         document.getElementById("camera-readout").innerHTML = txt;
       }
 
+      function setupSkierControls() {
+        const header = document.getElementById("skier-header");
+        const panel = document.getElementById("skier-panel");
+        const icon = document.getElementById("skier-toggle-icon");
+
+        header.addEventListener("click", () => {
+          panel.classList.toggle("collapsed");
+          icon.innerText = panel.classList.contains("collapsed") ? "▼" : "▲";
+        });
+
+        // Set initial values
+        document.getElementById("skierScale").value = skierParams.scale;
+        document.getElementById("skierX").value = skierParams.posX;
+        document.getElementById("skierY").value = skierParams.posY;
+        document.getElementById("skierZ").value = skierParams.posZ;
+        document.getElementById("skierRotX").value = skierParams.rotX;
+        document.getElementById("skierRotY").value = skierParams.rotY;
+        document.getElementById("skierRotZ").value = skierParams.rotZ;
+
+        updateSkierDisplay();
+
+        // Setup event listeners
+        document.getElementById("skierScale").addEventListener("input", (e) => {
+          skierParams.scale = parseFloat(e.target.value);
+          updateSkierTransform();
+          updateSkierDisplay();
+        });
+
+        ["skierX", "skierY", "skierZ"].forEach((id) => {
+          document.getElementById(id).addEventListener("input", (e) => {
+            const val = parseFloat(e.target.value);
+            if (id === "skierX") skierParams.posX = val;
+            if (id === "skierY") skierParams.posY = val;
+            if (id === "skierZ") skierParams.posZ = val;
+            updateSkierTransform();
+            updateSkierDisplay();
+          });
+        });
+
+        ["skierRotX", "skierRotY", "skierRotZ"].forEach((id) => {
+          document.getElementById(id).addEventListener("input", (e) => {
+            const val = parseFloat(e.target.value);
+            if (id === "skierRotX") skierParams.rotX = val;
+            if (id === "skierRotY") skierParams.rotY = val;
+            if (id === "skierRotZ") skierParams.rotZ = val;
+            updateSkierTransform();
+            updateSkierDisplay();
+          });
+        });
+      }
+
+      function updateSkierTransform() {
+        if (skierModel) {
+          skierModel.scale.set(
+            skierParams.scale,
+            skierParams.scale,
+            skierParams.scale
+          );
+          skierModel.position.x = skierBaseOffset.x + skierParams.posX;
+          skierModel.position.y = skierBaseOffset.y + skierParams.posY;
+          skierModel.position.z = skierBaseOffset.z + skierParams.posZ;
+          skierModel.rotation.x = skierParams.rotX;
+          skierModel.rotation.y = skierParams.rotY;
+          skierModel.rotation.z = skierParams.rotZ;
+        }
+      }
+
+      function setupBoneControls(boneNames) {
+        const boneControlsDiv = document.getElementById("bone-controls");
+        const boneControlsContent = document.getElementById(
+          "bone-controls-content"
+        );
+
+        // Show the bone controls section
+        boneControlsDiv.style.display = "block";
+
+        // Setup skiing pose button
+        const skiingPoseBtn = document.getElementById("apply-skiing-pose");
+        if (skiingPoseBtn) {
+          skiingPoseBtn.addEventListener("click", applySkiingPose);
+        }
+
+        // Filter for common body parts (arms, legs, head, etc.)
+        // Include bones with L_ or R_ prefix and main body bones
+        const relevantBones = boneNames.filter((name) => {
+          const lower = name.toLowerCase();
+          // Include main bones (skip twist bones for cleaner UI)
+          return (
+            (lower.includes("arm") && !lower.includes("twist")) ||
+            (lower.includes("hand") && !lower.includes("twist")) ||
+            (lower.includes("thigh") && !lower.includes("twist")) ||
+            (lower.includes("calf") && !lower.includes("twist")) ||
+            (lower.includes("foot") && !lower.includes("twist")) ||
+            lower.includes("head") ||
+            lower.includes("neck") ||
+            lower.includes("clavicle") ||
+            lower.includes("spine") ||
+            lower.includes("waist") ||
+            lower.includes("pelvis") ||
+            lower.includes("hip")
+          );
+        });
+
+        // If no obvious body parts, show main bones (skip twist bones)
+        const bonesToShow =
+          relevantBones.length > 0
+            ? relevantBones
+            : boneNames
+                .filter((n) => !n.toLowerCase().includes("twist"))
+                .slice(0, 15);
+
+        bonesToShow.forEach((boneName) => {
+          // Initialize bone params
+          if (!boneParams[boneName]) {
+            boneParams[boneName] = { x: 0, y: 0, z: 0 };
+          }
+
+          // Create bone control group
+          const boneGroup = document.createElement("div");
+          boneGroup.style.marginBottom = "12px";
+          boneGroup.style.paddingBottom = "8px";
+          boneGroup.style.borderBottom = "1px solid #444";
+
+          const boneTitle = document.createElement("div");
+          boneTitle.style.fontSize = "0.8rem";
+          boneTitle.style.color = "#f1c40f";
+          boneTitle.style.marginBottom = "5px";
+          boneTitle.style.fontWeight = "bold";
+          boneTitle.textContent = boneName;
+          boneGroup.appendChild(boneTitle);
+
+          // Create rotation controls for X, Y, Z
+          ["X", "Y", "Z"].forEach((axis) => {
+            const controlGroup = document.createElement("div");
+            controlGroup.className = "control-group";
+            controlGroup.style.marginBottom = "4px";
+
+            const label = document.createElement("label");
+            label.textContent = `Rot ${axis}`;
+            label.style.width = "60px";
+            controlGroup.appendChild(label);
+
+            const input = document.createElement("input");
+            input.type = "range";
+            input.id = `bone_${boneName}_${axis}`;
+            input.min = "-1.57";
+            input.max = "1.57";
+            input.step = "0.05";
+            input.value = boneParams[boneName][axis.toLowerCase()];
+            input.style.width = "140px";
+            controlGroup.appendChild(input);
+
+            const span = document.createElement("span");
+            span.id = `val_bone_${boneName}_${axis}`;
+            span.textContent = "0.00";
+            span.style.width = "40px";
+            span.style.textAlign = "right";
+            span.style.fontSize = "0.8rem";
+            span.style.color = "#ccc";
+            controlGroup.appendChild(span);
+
+            boneGroup.appendChild(controlGroup);
+
+            // Add event listener
+            input.addEventListener("input", (e) => {
+              const val = parseFloat(e.target.value);
+              boneParams[boneName][axis.toLowerCase()] = val;
+              updateBoneRotation(boneName);
+              span.textContent = val.toFixed(2);
+            });
+          });
+
+          boneControlsContent.appendChild(boneGroup);
+        });
+      }
+
+      function applySkiingPose() {
+        // Natural skiing pose - arms forward holding poles, legs bent, body leaning forward
+        const skiingPose = {
+          Root: { x: -1.57, y: 0.0, z: 1.57 },
+          Hip: { x: 0.73, y: -0.83, z: -0.14 },
+          Pelvis: { x: -2.2, y: -0.65, z: -2.44 },
+          L_Thigh: { x: -3.06, y: 0.01, z: 0.6 },
+          L_Calf: { x: 0.01, y: -0.01, z: -0.96 },
+          L_Foot: { x: 1.02, y: 0.42, z: 1.5 },
+          L_CalfTwist01: { x: -0.0, y: 0.0, z: -0.0 },
+          L_CalfTwist02: { x: -0.0, y: 0.0, z: 0.0 },
+          L_ThighTwist01: { x: 0.0, y: 0.0, z: -0.0 },
+          L_ThighTwist02: { x: 0.0, y: -0.0, z: 0.0 },
+          R_Thigh: { x: -2.88, y: 0.03, z: 0.6 },
+          R_ThighTwist01: { x: 0.0, y: -0.0, z: -0.0 },
+          R_ThighTwist02: { x: -0.0, y: -0.0, z: 0.0 },
+          R_Calf: { x: -0.22, y: 0.11, z: -0.8 },
+          R_Foot: { x: 1.12, y: 0.31, z: 1.4 },
+          R_CalfTwist01: { x: 0.0, y: -0.0, z: 0.0 },
+          R_CalfTwist02: { x: -0.0, y: -0.0, z: 0.0 },
+          Waist: { x: -2.2, y: -0.65, z: -2.44 },
+          Spine01: { x: -0.0, y: -0.0, z: -0.0 },
+          Spine02: { x: 0.0, y: 0.0, z: 0.0 },
+          NeckTwist01: { x: 0.0, y: -0.0, z: -0.0 },
+          NeckTwist02: { x: 0.0, y: 0.0, z: 0.0 },
+          Head: { x: -0.0, y: -0.37, z: -0.0 },
+          L_Clavicle: { x: -2.37, y: -1.39, z: 2.39 },
+          L_Upperarm: { x: 0.36, y: -0.0, z: -1.03 },
+          L_Forearm: { x: 1.22, y: 0.99, z: -0.27 },
+          L_ForearmTwist01: { x: -0.0, y: -0.0, z: -0.0 },
+          L_ForearmTwist02: { x: 0.0, y: -0.0, z: 0.0 },
+          L_Hand: { x: -0.0, y: -0.0, z: 0.0 },
+          L_UpperarmTwist01: { x: 0.0, y: 0.0, z: -0.0 },
+          L_UpperarmTwist02: { x: 0.0, y: 0.0, z: 0.0 },
+          R_Clavicle: { x: -2.24, y: -1.41, z: -0.84 },
+          R_Upperarm: { x: -0.57, y: -0.11, z: 0.81 },
+          R_UpperarmTwist01: { x: -0.0, y: -0.0, z: -0.0 },
+          R_UpperarmTwist02: { x: -0.0, y: -0.0, z: 0.0 },
+          R_Forearm: { x: 0.97, y: -0.54, z: 0.66 },
+          R_ForearmTwist01: { x: 0.0, y: -0.0, z: 0.0 },
+          R_ForearmTwist02: { x: -0.0, y: 0.0, z: -0.0 },
+          R_Hand: { x: -0.0, y: -0.0, z: -0.0 },
+        };
+
+        // Apply the pose
+        Object.keys(skiingPose).forEach((boneName) => {
+          if (skierBones[boneName] && skiingPose[boneName]) {
+            const pose = skiingPose[boneName];
+            boneParams[boneName] = {
+              x: pose.x || 0,
+              y: pose.y || 0,
+              z: pose.z || 0,
+            };
+
+            // Update the bone rotation
+            updateBoneRotation(boneName);
+
+            // Update UI sliders if they exist
+            ["X", "Y", "Z"].forEach((axis) => {
+              const inputId = `bone_${boneName}_${axis}`;
+              const spanId = `val_bone_${boneName}_${axis}`;
+              const input = document.getElementById(inputId);
+              const span = document.getElementById(spanId);
+
+              if (input && span) {
+                const val = boneParams[boneName][axis.toLowerCase()];
+                input.value = val;
+                span.textContent = val.toFixed(2);
+              }
+            });
+          }
+        });
+
+        console.log("Skiing pose applied!");
+      }
+
+      function updateBoneRotation(boneName) {
+        if (skierBones[boneName] && boneParams[boneName]) {
+          const bone = skierBones[boneName];
+          const params = boneParams[boneName];
+
+          // Create Euler rotation from individual axis rotations
+          const euler = new THREE.Euler(params.x, params.y, params.z, "XYZ");
+
+          // Apply rotation (using quaternion for better bone manipulation)
+          bone.quaternion.setFromEuler(euler);
+
+          // Update skeleton if it exists
+          if (
+            skierModel &&
+            skierModel.children[0] &&
+            skierModel.children[0].skeleton
+          ) {
+            skierModel.children[0].skeleton.update();
+          }
+        }
+      }
+
+      function updateSkierDisplay() {
+        document.getElementById("valSkierScale").innerText =
+          skierParams.scale.toFixed(1);
+        document.getElementById("valSkierX").innerText =
+          skierParams.posX.toFixed(2);
+        document.getElementById("valSkierY").innerText =
+          skierParams.posY.toFixed(2);
+        document.getElementById("valSkierZ").innerText =
+          skierParams.posZ.toFixed(2);
+        document.getElementById("valSkierRotX").innerText =
+          skierParams.rotX.toFixed(2);
+        document.getElementById("valSkierRotY").innerText =
+          skierParams.rotY.toFixed(2);
+        document.getElementById("valSkierRotZ").innerText =
+          skierParams.rotZ.toFixed(2);
+
+        const txt = `
+skierModel.scale.set(${skierParams.scale.toFixed(
+          1
+        )}, ${skierParams.scale.toFixed(1)}, ${skierParams.scale.toFixed(
+          1
+        )});<br>
+skierModel.position.set(${skierParams.posX.toFixed(
+          2
+        )}, ${skierParams.posY.toFixed(2)}, ${skierParams.posZ.toFixed(2)});<br>
+skierModel.rotation.set(${skierParams.rotX.toFixed(
+          2
+        )}, ${skierParams.rotY.toFixed(2)}, ${skierParams.rotZ.toFixed(2)});
+        `;
+        document.getElementById("skier-readout").innerHTML = txt;
+      }
+
       function createPlayer() {
         playerGroup = new THREE.Group();
+        playerGroup.position.set(0, CONFIG.worldRadius, 0);
+        scene.add(playerGroup);
+        player = playerGroup;
 
+        // Load the GLB model
+        const loader = new THREE.GLTFLoader();
+        loader.load(
+          "/assets/models/skier_v1.glb",
+          (gltf) => {
+            skierModel = gltf.scene;
+
+            // Center the model and position it on the ground (base positioning)
+            const box = new THREE.Box3().setFromObject(skierModel);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+
+            // Center horizontally but keep feet on ground (base offset)
+            skierBaseOffset.x = -center.x;
+            skierBaseOffset.y = -box.min.y;
+            skierBaseOffset.z = -center.z;
+
+            // Apply user-controlled transforms
+            skierModel.scale.set(
+              skierParams.scale,
+              skierParams.scale,
+              skierParams.scale
+            );
+            skierModel.position.x = skierBaseOffset.x + skierParams.posX;
+            skierModel.position.y = skierBaseOffset.y + skierParams.posY;
+            skierModel.position.z = skierBaseOffset.z + skierParams.posZ;
+            skierModel.rotation.x = skierParams.rotX;
+            skierModel.rotation.y = skierParams.rotY;
+            skierModel.rotation.z = skierParams.rotZ;
+
+            // Enable shadows and brighten materials
+            skierModel.traverse((child) => {
+              if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+
+                // Fix dark materials - make them brighter and more responsive to light
+                if (child.material) {
+                  // If it's a PBR material, adjust it
+                  if (child.material.metalness !== undefined) {
+                    child.material.metalness = Math.min(
+                      child.material.metalness,
+                      0.1
+                    );
+                    child.material.roughness = Math.max(
+                      child.material.roughness,
+                      0.8
+                    );
+                  }
+
+                  // Brighten the material
+                  if (child.material.color) {
+                    child.material.color.multiplyScalar(1.5);
+                  }
+
+                  // Add emissive for slight self-illumination
+                  if (child.material.emissive) {
+                    child.material.emissive.setRGB(0.1, 0.1, 0.1);
+                    child.material.emissiveIntensity = 0.3;
+                  }
+
+                  child.material.needsUpdate = true;
+                }
+              }
+
+              // Store bones for manipulation
+              if (child.isBone || child.type === "Bone") {
+                skierBones[child.name] = child;
+                console.log("Found bone:", child.name);
+              }
+            });
+
+            // Also check for skeleton in the scene
+            if (gltf.scene.children[0] && gltf.scene.children[0].skeleton) {
+              const skeleton = gltf.scene.children[0].skeleton;
+              skeleton.bones.forEach((bone) => {
+                skierBones[bone.name] = bone;
+                console.log("Found skeleton bone:", bone.name);
+              });
+            }
+
+            // Log all found bones
+            const boneNames = Object.keys(skierBones);
+            console.log("Total bones found:", boneNames.length);
+            console.log("Bone names:", boneNames);
+
+            // Setup bone controls if bones exist
+            if (boneNames.length > 0) {
+              // Initialize bone rotations from current bone states
+              boneNames.forEach((boneName) => {
+                const bone = skierBones[boneName];
+                if (bone) {
+                  const euler = new THREE.Euler().setFromQuaternion(
+                    bone.quaternion
+                  );
+                  boneParams[boneName] = {
+                    x: euler.x,
+                    y: euler.y,
+                    z: euler.z,
+                  };
+                }
+              });
+              setupBoneControls(boneNames);
+
+              // Apply skiing pose automatically on load
+              applySkiingPose();
+            } else {
+              console.log("No bones found - model may not be rigged");
+            }
+
+            playerGroup.add(skierModel);
+
+            // Add a dedicated light to illuminate the player
+            const playerLight = new THREE.PointLight(0xffffff, 1.5, 20);
+            playerLight.position.set(0, 5, 3);
+            playerGroup.add(playerLight);
+
+            // Setup animations if present
+            if (gltf.animations && gltf.animations.length > 0) {
+              mixer = new THREE.AnimationMixer(skierModel);
+
+              // Log available animations
+              console.log(
+                "Available animations:",
+                gltf.animations.map((a) => a.name)
+              );
+
+              // Play the first animation by default (usually idle or ski)
+              const action = mixer.clipAction(gltf.animations[0]);
+              action.play();
+            }
+
+            console.log("Skier model loaded! Size:", size);
+            updateSkierDisplay();
+          },
+          (progress) => {
+            console.log(
+              "Loading skier:",
+              ((progress.loaded / progress.total) * 100).toFixed(1) + "%"
+            );
+          },
+          (error) => {
+            console.error("Error loading skier model:", error);
+            // Fallback to procedural skier if model fails to load
+            createFallbackPlayer();
+          }
+        );
+      }
+
+      // Fallback procedural player in case GLB fails to load
+      function createFallbackPlayer() {
         const skinMat = new THREE.MeshLambertMaterial({ color: 0xffccaa });
         const suitMat = new THREE.MeshLambertMaterial({ color: 0xe67e22 });
         const skiMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
-        const goggleMat = new THREE.MeshLambertMaterial({
-          color: 0x3498db,
-          shininess: 100,
-        });
 
         const body = new THREE.Mesh(
           new THREE.CylinderGeometry(0.5, 0.3, 1.5, 8),
@@ -415,35 +1051,6 @@ fov: ${camParams.fov}
         head.castShadow = true;
         playerGroup.add(head);
 
-        const helmet = new THREE.Mesh(
-          new THREE.SphereGeometry(
-            0.42,
-            16,
-            16,
-            0,
-            Math.PI * 2,
-            0,
-            Math.PI * 0.5
-          ),
-          new THREE.MeshLambertMaterial({ color: 0xecf0f1 })
-        );
-        helmet.position.y = 1.7;
-        playerGroup.add(helmet);
-
-        const goggles = new THREE.Mesh(
-          new THREE.BoxGeometry(0.6, 0.25, 0.3),
-          goggleMat
-        );
-        goggles.position.set(0, 1.7, 0.25);
-        playerGroup.add(goggles);
-
-        const scarf = new THREE.Mesh(
-          new THREE.BoxGeometry(0.6, 0.2, 0.6),
-          new THREE.MeshLambertMaterial({ color: 0xe74c3c })
-        );
-        scarf.position.set(0, 1.4, 0);
-        playerGroup.add(scarf);
-
         const skiGeo = new THREE.BoxGeometry(0.3, 0.1, 2.5);
         const skiL = new THREE.Mesh(skiGeo, skiMat);
         skiL.position.set(-0.4, 0.05, 0);
@@ -454,10 +1061,6 @@ fov: ${camParams.fov}
         skiR.position.set(0.4, 0.05, 0);
         skiR.castShadow = true;
         playerGroup.add(skiR);
-
-        playerGroup.position.set(0, CONFIG.worldRadius, 0);
-        scene.add(playerGroup);
-        player = playerGroup;
       }
 
       function createParticleSystem() {
@@ -679,6 +1282,13 @@ fov: ${camParams.fov}
 
       function animate() {
         requestAnimationFrame(animate);
+
+        // Update animation mixer
+        const delta = clock.getDelta();
+        if (mixer) {
+          mixer.update(delta);
+        }
+
         if (gameActive) update();
         renderer.render(scene, camera);
       }
