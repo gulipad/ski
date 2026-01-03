@@ -43,6 +43,41 @@
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
       }
 
+      #animations-panel {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        width: 320px;
+        max-height: 90vh;
+        background: rgba(0, 0, 0, 0.9);
+        border-radius: 8px;
+        padding: 15px;
+        overflow-y: auto;
+        z-index: 100;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      }
+
+      #animations-panel h2 {
+        color: #f1c40f;
+        margin-bottom: 15px;
+        font-size: 1.2rem;
+      }
+
+      .animation-section {
+        margin-bottom: 25px;
+        padding: 15px;
+        background: rgba(52, 152, 219, 0.1);
+        border: 1px solid #3498db;
+        border-radius: 4px;
+      }
+
+      .animation-section h3 {
+        color: #3498db;
+        margin-bottom: 10px;
+        font-size: 1rem;
+        font-weight: bold;
+      }
+
       #controls-panel h2 {
         color: #f1c40f;
         margin-bottom: 15px;
@@ -161,14 +196,313 @@
     <div id="loading">Loading skier model...</div>
     <div id="canvas-container"></div>
 
+    <!-- Animations Panel (Left Side) -->
+    <div id="animations-panel">
+      <h2>Animations</h2>
+
+      <!-- Base Animation Section -->
+      <div class="animation-section">
+        <h3>Base Animation</h3>
+        <div style="margin-bottom: 15px">
+          <label style="display: flex; align-items: center; cursor: pointer">
+            <input
+              type="checkbox"
+              id="enable-base-anim"
+              style="margin-right: 8px; width: auto"
+            />
+            <span>Enable</span>
+          </label>
+        </div>
+        <div id="base-anim-params">
+          <div class="control-group" style="margin-bottom: 10px">
+            <label>Speed</label>
+            <input
+              type="range"
+              id="base-anim-speed"
+              min="0.5"
+              max="3"
+              step="0.1"
+              value="1.9"
+            />
+            <span id="val-base-anim-speed">1.9</span>
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444">
+            <div class="bone-title" style="margin-bottom: 8px">Pelvis Rot Y</div>
+            <div class="control-group">
+              <label>Amplitude</label>
+              <input
+                type="range"
+                id="pelvis-y-amp"
+                min="0"
+                max="0.3"
+                step="0.01"
+                value="0.19"
+              />
+              <span id="val-pelvis-y-amp">0.19</span>
+            </div>
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444">
+            <div class="bone-title" style="margin-bottom: 8px">Waist Rot Y</div>
+            <div class="control-group">
+              <label>Amplitude</label>
+              <input
+                type="range"
+                id="waist-y-amp"
+                min="0"
+                max="0.3"
+                step="0.01"
+                value="0.20"
+              />
+              <span id="val-waist-y-amp">0.20</span>
+            </div>
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444">
+            <div class="bone-title" style="margin-bottom: 8px">Head Rot Y</div>
+            <div class="control-group">
+              <label>Amplitude</label>
+              <input
+                type="range"
+                id="head-y-amp"
+                min="0"
+                max="0.3"
+                step="0.01"
+                value="0.19"
+              />
+              <span id="val-head-y-amp">0.19</span>
+            </div>
+          </div>
+          <button
+            id="copy-base-params"
+            class="secondary"
+            style="margin-top: 15px; padding: 8px; font-size: 0.85rem; width: 100%"
+          >
+            Copy Parameters
+          </button>
+        </div>
+      </div>
+
+      <!-- Jump Animation Section -->
+      <div class="animation-section">
+        <h3>Jump Animation</h3>
+        <div id="jump-anim-params">
+          <div class="control-group" style="margin-bottom: 10px">
+            <label>Speed</label>
+            <input
+              type="range"
+              id="jump-anim-speed"
+              min="0.5"
+              max="3"
+              step="0.1"
+              value="1.0"
+            />
+            <span id="val-jump-anim-speed">1.0</span>
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444">
+            <div class="control-group">
+              <label>L_Upperarm Z</label>
+              <input
+                type="range"
+                id="jump-l-arm-z"
+                min="-0.5"
+                max="0.5"
+                step="0.01"
+                value="-0.12"
+              />
+              <span id="val-jump-l-arm-z">-0.12</span>
+            </div>
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444">
+            <div class="control-group">
+              <label>R_Upperarm Z</label>
+              <input
+                type="range"
+                id="jump-r-arm-z"
+                min="-0.5"
+                max="0.5"
+                step="0.01"
+                value="0.02"
+              />
+              <span id="val-jump-r-arm-z">0.02</span>
+            </div>
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444">
+            <div class="control-group">
+              <label>L_Thigh Y</label>
+              <input
+                type="range"
+                id="jump-l-thigh-y"
+                min="-1"
+                max="1"
+                step="0.01"
+                value="-0.42"
+              />
+              <span id="val-jump-l-thigh-y">-0.42</span>
+            </div>
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444">
+            <div class="control-group">
+              <label>R_Thigh Y</label>
+              <input
+                type="range"
+                id="jump-r-thigh-y"
+                min="-1"
+                max="1"
+                step="0.01"
+                value="0.63"
+              />
+              <span id="val-jump-r-thigh-y">0.63</span>
+            </div>
+          </div>
+          <button
+            id="test-jump"
+            class="secondary"
+            style="margin-top: 10px; padding: 8px; font-size: 0.85rem; width: 100%"
+          >
+            Test Jump Animation
+          </button>
+          <button
+            id="copy-jump-params"
+            class="secondary"
+            style="margin-top: 10px; padding: 8px; font-size: 0.85rem; width: 100%"
+          >
+            Copy Parameters
+          </button>
+        </div>
+      </div>
+
+      <!-- Right Turn Animation Section -->
+      <div class="animation-section">
+        <h3>Right Turn Animation</h3>
+        <div id="right-turn-params">
+          <div class="control-group" style="margin-bottom: 10px">
+            <label>Speed</label>
+            <input
+              type="range"
+              id="right-turn-speed"
+              min="0.5"
+              max="3"
+              step="0.1"
+              value="1.0"
+            />
+            <span id="val-right-turn-speed">1.0</span>
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444">
+            <div class="control-group">
+              <label>Pelvis Rot Y</label>
+              <input
+                type="range"
+                id="right-turn-pelvis-y"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="-1.02"
+              />
+              <span id="val-right-turn-pelvis-y">-1.02</span>
+            </div>
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444">
+            <div class="control-group">
+              <label>Head Rot Y</label>
+              <input
+                type="range"
+                id="right-turn-head-y"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="0.13"
+              />
+              <span id="val-right-turn-head-y">0.13</span>
+            </div>
+          </div>
+          <button
+            id="test-right-turn"
+            class="secondary"
+            style="margin-top: 10px; padding: 8px; font-size: 0.85rem; width: 100%"
+          >
+            Test Right Turn
+          </button>
+          <button
+            id="copy-right-turn-params"
+            class="secondary"
+            style="margin-top: 10px; padding: 8px; font-size: 0.85rem; width: 100%"
+          >
+            Copy Parameters
+          </button>
+        </div>
+      </div>
+
+      <!-- Left Turn Animation Section -->
+      <div class="animation-section">
+        <h3>Left Turn Animation</h3>
+        <div id="left-turn-params">
+          <div class="control-group" style="margin-bottom: 10px">
+            <label>Speed</label>
+            <input
+              type="range"
+              id="left-turn-speed"
+              min="0.5"
+              max="3"
+              step="0.1"
+              value="1.0"
+            />
+            <span id="val-left-turn-speed">1.0</span>
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444">
+            <div class="control-group">
+              <label>Pelvis Rot Y</label>
+              <input
+                type="range"
+                id="left-turn-pelvis-y"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="-0.02"
+              />
+              <span id="val-left-turn-pelvis-y">-0.02</span>
+            </div>
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444">
+            <div class="control-group">
+              <label>Head Rot Y</label>
+              <input
+                type="range"
+                id="left-turn-head-y"
+                min="-2"
+                max="2"
+                step="0.01"
+                value="-0.87"
+              />
+              <span id="val-left-turn-head-y">-0.87</span>
+            </div>
+          </div>
+          <button
+            id="test-left-turn"
+            class="secondary"
+            style="margin-top: 10px; padding: 8px; font-size: 0.85rem; width: 100%"
+          >
+            Test Left Turn
+          </button>
+          <button
+            id="copy-left-turn-params"
+            class="secondary"
+            style="margin-top: 10px; padding: 8px; font-size: 0.85rem; width: 100%"
+          >
+            Copy Parameters
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls Panel (Right Side) -->
     <div id="controls-panel">
       <h2>Skier Pose Editor</h2>
 
       <button id="apply-skiing-pose">Apply Skiing Pose</button>
       <button id="reset-pose" class="secondary">Reset to Default</button>
       <button id="copy-pose" class="secondary">Copy Pose Code</button>
+      <button id="copy-camera" class="secondary">Copy Camera Position</button>
 
-      <div class="info-text">
+      <div class="info-text" style="margin-top: 15px;">
         Use mouse to rotate/zoom the camera. Adjust bones below to pose the
         skier.
       </div>
@@ -189,6 +523,46 @@
       let boneParams = {};
       let skierBaseOffset = { x: 0, y: 0, z: 0 };
 
+      // Animation state
+      let baseAnimationEnabled = false;
+      let baseAnimationSpeed = 1.9;
+      let animationTime = 0;
+      let animationParams = {
+        pelvis: { baseY: 0, amplitude: 0.19 },
+        waist: { baseY: 0, amplitude: 0.20 },
+        head: { baseY: -0.47, amplitude: 0.19 },
+      };
+      
+      // Jump animation state
+      let jumpAnimationSpeed = 1.0;
+      let jumpAnimationParams = {
+        lUpperarmZ: -0.12,
+        rUpperarmZ: 0.02,
+        lThighY: -0.42,
+        rThighY: 0.63,
+      };
+      let isJumping = false;
+      let jumpAnimationTime = 0;
+      
+      // Turn animation state
+      let rightTurnSpeed = 1.0;
+      let rightTurnParams = {
+        pelvisY: -1.02,
+        headY: 0.13,
+      };
+      let rightTurnBaseValues = { pelvisY: 0, headY: 0 };
+      let isRightTurning = false;
+      let rightTurnTime = 0;
+      
+      let leftTurnSpeed = 1.0;
+      let leftTurnParams = {
+        pelvisY: -0.02,
+        headY: -0.87,
+      };
+      let leftTurnBaseValues = { pelvisY: 0, headY: 0 };
+      let isLeftTurning = false;
+      let leftTurnTime = 0;
+
       // Initialize scene
       function init() {
         scene = new THREE.Scene();
@@ -200,8 +574,8 @@
           0.1,
           1000
         );
-        camera.position.set(0, 5, 15);
-        camera.lookAt(0, 0, 0);
+        camera.position.set(-0.92, 4.77, -6.75);
+        camera.lookAt(-0.07, 1.06, -0.05);
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -217,6 +591,8 @@
         controls.dampingFactor = 0.05;
         controls.minDistance = 5;
         controls.maxDistance = 50;
+        controls.target.set(-0.07, 1.06, -0.05);
+        controls.update();
 
         // Lighting
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
@@ -251,6 +627,12 @@
         document
           .getElementById("copy-pose")
           .addEventListener("click", copyPoseCode);
+        document
+          .getElementById("copy-camera")
+          .addEventListener("click", copyCameraPosition);
+
+        // Setup animation controls
+        setupAnimationControls();
 
         animate();
       }
@@ -347,6 +729,10 @@
                 }
               });
               setupBoneControls(boneNames);
+
+              // Apply skiing pose automatically on load
+              applySkiingPose();
+
               document.getElementById("loading").style.display = "none";
             }
           },
@@ -490,7 +876,7 @@
           Spine02: { x: 0.0, y: 0.0, z: 0.0 },
           NeckTwist01: { x: 0.0, y: -0.0, z: -0.0 },
           NeckTwist02: { x: 0.0, y: 0.0, z: 0.0 },
-          Head: { x: -0.0, y: -0.37, z: -0.0 },
+          Head: { x: -0.0, y: -0.47, z: -0.0 },
           L_Clavicle: { x: -2.37, y: -1.39, z: 2.39 },
           L_Upperarm: { x: 0.36, y: -0.0, z: -1.03 },
           L_Forearm: { x: 1.22, y: 0.99, z: -0.27 },
@@ -500,13 +886,13 @@
           L_UpperarmTwist01: { x: 0.0, y: 0.0, z: -0.0 },
           L_UpperarmTwist02: { x: 0.0, y: 0.0, z: 0.0 },
           R_Clavicle: { x: -2.24, y: -1.41, z: -0.84 },
-          R_Upperarm: { x: -0.57, y: -0.11, z: 0.81 },
+          R_Upperarm: { x: -0.32, y: 0.13, z: 0.88 },
           R_UpperarmTwist01: { x: -0.0, y: -0.0, z: -0.0 },
           R_UpperarmTwist02: { x: -0.0, y: -0.0, z: 0.0 },
-          R_Forearm: { x: 0.97, y: -0.54, z: 0.66 },
+          R_Forearm: { x: 1.38, y: -0.02, z: 0.48 },
           R_ForearmTwist01: { x: 0.0, y: -0.0, z: 0.0 },
           R_ForearmTwist02: { x: -0.0, y: 0.0, z: -0.0 },
-          R_Hand: { x: -0.0, y: -0.0, z: -0.0 },
+          R_Hand: { x: 0.03, y: 0.38, z: 0.08 },
         };
 
         Object.keys(skiingPose).forEach((boneName) => {
@@ -517,6 +903,23 @@
               y: pose.y || 0,
               z: pose.z || 0,
             };
+
+            // Store base values for animated bones
+            if (boneName === "Pelvis") {
+              animationParams.pelvis.baseY = boneParams[boneName].y;
+            } else if (boneName === "Waist") {
+              animationParams.waist.baseY = boneParams[boneName].y;
+            } else if (boneName === "Head") {
+              animationParams.head.baseY = boneParams[boneName].y;
+            } else if (boneName === "L_Upperarm") {
+              lUpperarmBaseZ = boneParams[boneName].z;
+            } else if (boneName === "R_Upperarm") {
+              rUpperarmBaseZ = boneParams[boneName].z;
+            } else if (boneName === "L_Thigh") {
+              lThighBaseY = boneParams[boneName].y;
+            } else if (boneName === "R_Thigh") {
+              rThighBaseY = boneParams[boneName].y;
+            }
 
             updateBoneRotation(boneName);
 
@@ -603,14 +1006,550 @@
         });
       }
 
+      function copyCameraPosition() {
+        const pos = camera.position;
+        const target = controls.target;
+        const code = `camera.position.set(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)});
+camera.lookAt(${target.x.toFixed(2)}, ${target.y.toFixed(2)}, ${target.z.toFixed(2)});
+// Or using OrbitControls target:
+controls.target.set(${target.x.toFixed(2)}, ${target.y.toFixed(2)}, ${target.z.toFixed(2)});
+controls.update();`;
+        
+        navigator.clipboard.writeText(code).then(() => {
+          const btn = document.getElementById("copy-camera");
+          const originalText = btn.textContent;
+          btn.textContent = "Copied!";
+          btn.style.background = "#27ae60";
+          setTimeout(() => {
+            btn.textContent = originalText;
+            btn.style.background = "#3498db";
+          }, 2000);
+        });
+      }
+
       function onWindowResize() {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
       }
 
+      function setupAnimationControls() {
+        // Base Animation Controls
+        const baseEnableCheckbox = document.getElementById("enable-base-anim");
+        const baseSpeedInput = document.getElementById("base-anim-speed");
+        const baseSpeedVal = document.getElementById("val-base-anim-speed");
+        const pelvisAmpInput = document.getElementById("pelvis-y-amp");
+        const pelvisAmpVal = document.getElementById("val-pelvis-y-amp");
+        const waistAmpInput = document.getElementById("waist-y-amp");
+        const waistAmpVal = document.getElementById("val-waist-y-amp");
+        const headAmpInput = document.getElementById("head-y-amp");
+        const headAmpVal = document.getElementById("val-head-y-amp");
+        const copyBaseParamsBtn = document.getElementById("copy-base-params");
+
+        baseEnableCheckbox.addEventListener("change", (e) => {
+          baseAnimationEnabled = e.target.checked;
+          if (baseAnimationEnabled) {
+            // Store base values when enabling
+            if (boneParams.Pelvis)
+              animationParams.pelvis.baseY = boneParams.Pelvis.y;
+            if (boneParams.Waist)
+              animationParams.waist.baseY = boneParams.Waist.y;
+            if (boneParams.Head) animationParams.head.baseY = boneParams.Head.y;
+          } else {
+            // Reset to base values when disabling
+            if (boneParams.Pelvis) {
+              boneParams.Pelvis.y = animationParams.pelvis.baseY;
+              updateBoneRotation("Pelvis");
+              updateBoneSlider("Pelvis", "Y");
+            }
+            if (boneParams.Waist) {
+              boneParams.Waist.y = animationParams.waist.baseY;
+              updateBoneRotation("Waist");
+              updateBoneSlider("Waist", "Y");
+            }
+            if (boneParams.Head) {
+              boneParams.Head.y = animationParams.head.baseY;
+              updateBoneRotation("Head");
+              updateBoneSlider("Head", "Y");
+            }
+          }
+        });
+
+        baseSpeedInput.addEventListener("input", (e) => {
+          baseAnimationSpeed = parseFloat(e.target.value);
+          baseSpeedVal.textContent = baseAnimationSpeed.toFixed(1);
+        });
+
+        pelvisAmpInput.addEventListener("input", (e) => {
+          animationParams.pelvis.amplitude = parseFloat(e.target.value);
+          pelvisAmpVal.textContent =
+            animationParams.pelvis.amplitude.toFixed(2);
+        });
+
+        waistAmpInput.addEventListener("input", (e) => {
+          animationParams.waist.amplitude = parseFloat(e.target.value);
+          waistAmpVal.textContent = animationParams.waist.amplitude.toFixed(2);
+        });
+
+        headAmpInput.addEventListener("input", (e) => {
+          animationParams.head.amplitude = parseFloat(e.target.value);
+          headAmpVal.textContent = animationParams.head.amplitude.toFixed(2);
+        });
+
+        copyBaseParamsBtn.addEventListener("click", () => {
+          const params = {
+            speed: baseAnimationSpeed,
+            pelvisAmplitude: animationParams.pelvis.amplitude,
+            waistAmplitude: animationParams.waist.amplitude,
+            headAmplitude: animationParams.head.amplitude,
+          };
+          const code = `const baseAnimationParams = {
+  speed: ${params.speed.toFixed(1)},
+  pelvisAmplitude: ${params.pelvisAmplitude.toFixed(2)},
+  waistAmplitude: ${params.waistAmplitude.toFixed(2)},
+  headAmplitude: ${params.headAmplitude.toFixed(2)},
+};`;
+          navigator.clipboard.writeText(code).then(() => {
+            copyBaseParamsBtn.textContent = "Copied!";
+            setTimeout(() => {
+              copyBaseParamsBtn.textContent = "Copy Parameters";
+            }, 2000);
+          });
+        });
+
+        // Jump Animation Controls
+        const jumpSpeedInput = document.getElementById("jump-anim-speed");
+        const jumpSpeedVal = document.getElementById("val-jump-anim-speed");
+        const jumpLArmInput = document.getElementById("jump-l-arm-z");
+        const jumpLArmVal = document.getElementById("val-jump-l-arm-z");
+        const jumpRArmInput = document.getElementById("jump-r-arm-z");
+        const jumpRArmVal = document.getElementById("val-jump-r-arm-z");
+        const jumpLThighInput = document.getElementById("jump-l-thigh-y");
+        const jumpLThighVal = document.getElementById("val-jump-l-thigh-y");
+        const jumpRThighInput = document.getElementById("jump-r-thigh-y");
+        const jumpRThighVal = document.getElementById("val-jump-r-thigh-y");
+        const testJumpBtn = document.getElementById("test-jump");
+        const copyJumpParamsBtn = document.getElementById("copy-jump-params");
+
+        jumpSpeedInput.addEventListener("input", (e) => {
+          jumpAnimationSpeed = parseFloat(e.target.value);
+          jumpSpeedVal.textContent = jumpAnimationSpeed.toFixed(1);
+        });
+
+        jumpLArmInput.addEventListener("input", (e) => {
+          jumpAnimationParams.lUpperarmZ = parseFloat(e.target.value);
+          jumpLArmVal.textContent = jumpAnimationParams.lUpperarmZ.toFixed(2);
+        });
+
+        jumpRArmInput.addEventListener("input", (e) => {
+          jumpAnimationParams.rUpperarmZ = parseFloat(e.target.value);
+          jumpRArmVal.textContent = jumpAnimationParams.rUpperarmZ.toFixed(2);
+        });
+
+        jumpLThighInput.addEventListener("input", (e) => {
+          jumpAnimationParams.lThighY = parseFloat(e.target.value);
+          jumpLThighVal.textContent = jumpAnimationParams.lThighY.toFixed(2);
+        });
+
+        jumpRThighInput.addEventListener("input", (e) => {
+          jumpAnimationParams.rThighY = parseFloat(e.target.value);
+          jumpRThighVal.textContent = jumpAnimationParams.rThighY.toFixed(2);
+        });
+
+        testJumpBtn.addEventListener("click", () => {
+          if (isJumping) {
+            resetJumpAnimation();
+          } else {
+            startJumpAnimation();
+          }
+        });
+
+        copyJumpParamsBtn.addEventListener("click", () => {
+          const params = {
+            speed: jumpAnimationSpeed,
+            lUpperarmZ: jumpAnimationParams.lUpperarmZ,
+            rUpperarmZ: jumpAnimationParams.rUpperarmZ,
+            lThighY: jumpAnimationParams.lThighY,
+            rThighY: jumpAnimationParams.rThighY,
+          };
+          const code = `const jumpAnimationParams = {
+  speed: ${params.speed.toFixed(1)},
+  lUpperarmZ: ${params.lUpperarmZ.toFixed(2)},
+  rUpperarmZ: ${params.rUpperarmZ.toFixed(2)},
+  lThighY: ${params.lThighY.toFixed(2)},
+  rThighY: ${params.rThighY.toFixed(2)},
+};`;
+          navigator.clipboard.writeText(code).then(() => {
+            copyJumpParamsBtn.textContent = "Copied!";
+            setTimeout(() => {
+              copyJumpParamsBtn.textContent = "Copy Parameters";
+            }, 2000);
+          });
+        });
+
+        // Right Turn Animation Controls
+        const rightTurnSpeedInput = document.getElementById("right-turn-speed");
+        const rightTurnSpeedVal = document.getElementById("val-right-turn-speed");
+        const rightTurnPelvisInput = document.getElementById("right-turn-pelvis-y");
+        const rightTurnPelvisVal = document.getElementById("val-right-turn-pelvis-y");
+        const rightTurnHeadInput = document.getElementById("right-turn-head-y");
+        const rightTurnHeadVal = document.getElementById("val-right-turn-head-y");
+        const testRightTurnBtn = document.getElementById("test-right-turn");
+        const copyRightTurnParamsBtn = document.getElementById("copy-right-turn-params");
+
+        rightTurnSpeedInput.addEventListener("input", (e) => {
+          rightTurnSpeed = parseFloat(e.target.value);
+          rightTurnSpeedVal.textContent = rightTurnSpeed.toFixed(1);
+        });
+
+        rightTurnPelvisInput.addEventListener("input", (e) => {
+          rightTurnParams.pelvisY = parseFloat(e.target.value);
+          rightTurnPelvisVal.textContent = rightTurnParams.pelvisY.toFixed(2);
+        });
+
+        rightTurnHeadInput.addEventListener("input", (e) => {
+          rightTurnParams.headY = parseFloat(e.target.value);
+          rightTurnHeadVal.textContent = rightTurnParams.headY.toFixed(2);
+        });
+
+        testRightTurnBtn.addEventListener("click", () => {
+          if (isRightTurning) {
+            resetRightTurn();
+          } else {
+            startRightTurn();
+          }
+        });
+
+        copyRightTurnParamsBtn.addEventListener("click", () => {
+          const params = {
+            speed: rightTurnSpeed,
+            pelvisY: rightTurnParams.pelvisY,
+            headY: rightTurnParams.headY,
+          };
+          const code = `const rightTurnParams = {
+  speed: ${params.speed.toFixed(1)},
+  pelvisY: ${params.pelvisY.toFixed(2)},
+  headY: ${params.headY.toFixed(2)},
+};`;
+          navigator.clipboard.writeText(code).then(() => {
+            copyRightTurnParamsBtn.textContent = "Copied!";
+            setTimeout(() => {
+              copyRightTurnParamsBtn.textContent = "Copy Parameters";
+            }, 2000);
+          });
+        });
+
+        // Left Turn Animation Controls
+        const leftTurnSpeedInput = document.getElementById("left-turn-speed");
+        const leftTurnSpeedVal = document.getElementById("val-left-turn-speed");
+        const leftTurnPelvisInput = document.getElementById("left-turn-pelvis-y");
+        const leftTurnPelvisVal = document.getElementById("val-left-turn-pelvis-y");
+        const leftTurnHeadInput = document.getElementById("left-turn-head-y");
+        const leftTurnHeadVal = document.getElementById("val-left-turn-head-y");
+        const testLeftTurnBtn = document.getElementById("test-left-turn");
+        const copyLeftTurnParamsBtn = document.getElementById("copy-left-turn-params");
+
+        leftTurnSpeedInput.addEventListener("input", (e) => {
+          leftTurnSpeed = parseFloat(e.target.value);
+          leftTurnSpeedVal.textContent = leftTurnSpeed.toFixed(1);
+        });
+
+        leftTurnPelvisInput.addEventListener("input", (e) => {
+          leftTurnParams.pelvisY = parseFloat(e.target.value);
+          leftTurnPelvisVal.textContent = leftTurnParams.pelvisY.toFixed(2);
+        });
+
+        leftTurnHeadInput.addEventListener("input", (e) => {
+          leftTurnParams.headY = parseFloat(e.target.value);
+          leftTurnHeadVal.textContent = leftTurnParams.headY.toFixed(2);
+        });
+
+        testLeftTurnBtn.addEventListener("click", () => {
+          if (isLeftTurning) {
+            resetLeftTurn();
+          } else {
+            startLeftTurn();
+          }
+        });
+
+        copyLeftTurnParamsBtn.addEventListener("click", () => {
+          const params = {
+            speed: leftTurnSpeed,
+            pelvisY: leftTurnParams.pelvisY,
+            headY: leftTurnParams.headY,
+          };
+          const code = `const leftTurnParams = {
+  speed: ${params.speed.toFixed(1)},
+  pelvisY: ${params.pelvisY.toFixed(2)},
+  headY: ${params.headY.toFixed(2)},
+};`;
+          navigator.clipboard.writeText(code).then(() => {
+            copyLeftTurnParamsBtn.textContent = "Copied!";
+            setTimeout(() => {
+              copyLeftTurnParamsBtn.textContent = "Copy Parameters";
+            }, 2000);
+          });
+        });
+      }
+
+      function updateBoneSlider(boneName, axis) {
+        const input = document.getElementById(`bone_${boneName}_${axis}`);
+        const span = document.getElementById(`val_bone_${boneName}_${axis}`);
+        if (input && span && boneParams[boneName]) {
+          const val = boneParams[boneName][axis.toLowerCase()];
+          input.value = val;
+          span.textContent = val.toFixed(2);
+        }
+      }
+
+      function updateAnimations(deltaTime) {
+        if (!baseAnimationEnabled) return;
+
+        animationTime += deltaTime * baseAnimationSpeed;
+
+        // Pelvis - slower, smoother sway
+        if (boneParams.Pelvis && skierBones.Pelvis) {
+          const offset =
+            Math.sin(animationTime * 0.8) * animationParams.pelvis.amplitude;
+          boneParams.Pelvis.y = animationParams.pelvis.baseY + offset;
+          updateBoneRotation("Pelvis");
+          updateBoneSlider("Pelvis", "Y");
+        }
+
+        // Waist - slightly faster, counter to pelvis
+        if (boneParams.Waist && skierBones.Waist) {
+          const offset =
+            Math.sin(animationTime * 1.2 + Math.PI * 0.3) *
+            animationParams.waist.amplitude;
+          boneParams.Waist.y = animationParams.waist.baseY + offset;
+          updateBoneRotation("Waist");
+          updateBoneSlider("Waist", "Y");
+        }
+
+        // Head - faster, subtle movement
+        if (boneParams.Head && skierBones.Head) {
+          const offset =
+            Math.sin(animationTime * 1.5 + Math.PI * 0.5) *
+            animationParams.head.amplitude;
+          boneParams.Head.y = animationParams.head.baseY + offset;
+          updateBoneRotation("Head");
+          updateBoneSlider("Head", "Y");
+        }
+      }
+
+      let lUpperarmBaseZ = 0;
+      let rUpperarmBaseZ = 0;
+      let lThighBaseY = 0;
+      let rThighBaseY = 0;
+
+      function startJumpAnimation() {
+        if (!boneParams.L_Upperarm || !boneParams.R_Upperarm) return;
+        
+        // Store base values (current position)
+        lUpperarmBaseZ = boneParams.L_Upperarm.z;
+        rUpperarmBaseZ = boneParams.R_Upperarm.z;
+        if (boneParams.L_Thigh) lThighBaseY = boneParams.L_Thigh.y;
+        if (boneParams.R_Thigh) rThighBaseY = boneParams.R_Thigh.y;
+        
+        isJumping = true;
+        jumpAnimationTime = 0;
+        document.getElementById("test-jump").textContent = "Animating...";
+      }
+
+      function resetJumpAnimation() {
+        if (!boneParams.L_Upperarm || !boneParams.R_Upperarm) return;
+        
+        // Reset to base values
+        boneParams.L_Upperarm.z = lUpperarmBaseZ;
+        boneParams.R_Upperarm.z = rUpperarmBaseZ;
+        if (boneParams.L_Thigh) boneParams.L_Thigh.y = lThighBaseY;
+        if (boneParams.R_Thigh) boneParams.R_Thigh.y = rThighBaseY;
+        
+        updateBoneRotation("L_Upperarm");
+        updateBoneRotation("R_Upperarm");
+        if (boneParams.L_Thigh) updateBoneRotation("L_Thigh");
+        if (boneParams.R_Thigh) updateBoneRotation("R_Thigh");
+        
+        updateBoneSlider("L_Upperarm", "Z");
+        updateBoneSlider("R_Upperarm", "Z");
+        if (boneParams.L_Thigh) updateBoneSlider("L_Thigh", "Y");
+        if (boneParams.R_Thigh) updateBoneSlider("R_Thigh", "Y");
+        
+        isJumping = false;
+        jumpAnimationTime = 0;
+        document.getElementById("test-jump").textContent = "Test Jump Animation";
+      }
+
+      function updateJumpAnimation(deltaTime) {
+        if (!isJumping) return;
+
+        jumpAnimationTime += deltaTime * jumpAnimationSpeed;
+        const jumpUpDuration = 0.3; // Time to go from base to jump position
+        const jumpDownDuration = 0.3; // Time to go from jump back to base
+        const totalDuration = jumpUpDuration + jumpDownDuration;
+
+        let progress = 0;
+
+        if (jumpAnimationTime < jumpUpDuration) {
+          // Phase 1: Going up (base → jump position)
+          const t = jumpAnimationTime / jumpUpDuration;
+          // Ease out for going up
+          progress = 1 - (1 - t) * (1 - t);
+        } else if (jumpAnimationTime < totalDuration) {
+          // Phase 2: Going down (jump position → base)
+          const t = (jumpAnimationTime - jumpUpDuration) / jumpDownDuration;
+          // Ease in for going down
+          progress = 1 - t * t;
+        } else {
+          // Animation complete - reset to base
+          resetJumpAnimation();
+          return;
+        }
+
+        if (boneParams.L_Upperarm && skierBones.L_Upperarm) {
+          boneParams.L_Upperarm.z = lUpperarmBaseZ + (jumpAnimationParams.lUpperarmZ - lUpperarmBaseZ) * progress;
+          updateBoneRotation("L_Upperarm");
+          updateBoneSlider("L_Upperarm", "Z");
+        }
+
+        if (boneParams.R_Upperarm && skierBones.R_Upperarm) {
+          boneParams.R_Upperarm.z = rUpperarmBaseZ + (jumpAnimationParams.rUpperarmZ - rUpperarmBaseZ) * progress;
+          updateBoneRotation("R_Upperarm");
+          updateBoneSlider("R_Upperarm", "Z");
+        }
+
+        if (boneParams.L_Thigh && skierBones.L_Thigh) {
+          boneParams.L_Thigh.y = lThighBaseY + (jumpAnimationParams.lThighY - lThighBaseY) * progress;
+          updateBoneRotation("L_Thigh");
+          updateBoneSlider("L_Thigh", "Y");
+        }
+
+        if (boneParams.R_Thigh && skierBones.R_Thigh) {
+          boneParams.R_Thigh.y = rThighBaseY + (jumpAnimationParams.rThighY - rThighBaseY) * progress;
+          updateBoneRotation("R_Thigh");
+          updateBoneSlider("R_Thigh", "Y");
+        }
+      }
+
+      function startRightTurn() {
+        if (!boneParams.Pelvis || !boneParams.Head) return;
+        rightTurnBaseValues.pelvisY = boneParams.Pelvis.y;
+        rightTurnBaseValues.headY = boneParams.Head.y;
+        isRightTurning = true;
+        rightTurnTime = 0;
+        document.getElementById("test-right-turn").textContent = "Animating...";
+      }
+
+      function resetRightTurn() {
+        if (!boneParams.Pelvis || !boneParams.Head) return;
+        boneParams.Pelvis.y = rightTurnBaseValues.pelvisY;
+        boneParams.Head.y = rightTurnBaseValues.headY;
+        updateBoneRotation("Pelvis");
+        updateBoneRotation("Head");
+        updateBoneSlider("Pelvis", "Y");
+        updateBoneSlider("Head", "Y");
+        isRightTurning = false;
+        rightTurnTime = 0;
+        document.getElementById("test-right-turn").textContent = "Test Right Turn";
+      }
+
+      function updateRightTurnAnimation(deltaTime) {
+        if (!isRightTurning) return;
+
+        rightTurnTime += deltaTime * rightTurnSpeed;
+        const turnUpDuration = 0.2;
+        const turnDownDuration = 0.2;
+        const totalDuration = turnUpDuration + turnDownDuration;
+
+        let progress = 0;
+        if (rightTurnTime < turnUpDuration) {
+          const t = rightTurnTime / turnUpDuration;
+          progress = 1 - (1 - t) * (1 - t);
+        } else if (rightTurnTime < totalDuration) {
+          const t = (rightTurnTime - turnUpDuration) / turnDownDuration;
+          progress = 1 - t * t;
+        } else {
+          resetRightTurn();
+          return;
+        }
+
+        if (boneParams.Pelvis && skierBones.Pelvis) {
+          boneParams.Pelvis.y = rightTurnBaseValues.pelvisY + (rightTurnParams.pelvisY - rightTurnBaseValues.pelvisY) * progress;
+          updateBoneRotation("Pelvis");
+          updateBoneSlider("Pelvis", "Y");
+        }
+
+        if (boneParams.Head && skierBones.Head) {
+          boneParams.Head.y = rightTurnBaseValues.headY + (rightTurnParams.headY - rightTurnBaseValues.headY) * progress;
+          updateBoneRotation("Head");
+          updateBoneSlider("Head", "Y");
+        }
+      }
+
+      function startLeftTurn() {
+        if (!boneParams.Pelvis || !boneParams.Head) return;
+        leftTurnBaseValues.pelvisY = boneParams.Pelvis.y;
+        leftTurnBaseValues.headY = boneParams.Head.y;
+        isLeftTurning = true;
+        leftTurnTime = 0;
+        document.getElementById("test-left-turn").textContent = "Animating...";
+      }
+
+      function resetLeftTurn() {
+        if (!boneParams.Pelvis || !boneParams.Head) return;
+        boneParams.Pelvis.y = leftTurnBaseValues.pelvisY;
+        boneParams.Head.y = leftTurnBaseValues.headY;
+        updateBoneRotation("Pelvis");
+        updateBoneRotation("Head");
+        updateBoneSlider("Pelvis", "Y");
+        updateBoneSlider("Head", "Y");
+        isLeftTurning = false;
+        leftTurnTime = 0;
+        document.getElementById("test-left-turn").textContent = "Test Left Turn";
+      }
+
+      function updateLeftTurnAnimation(deltaTime) {
+        if (!isLeftTurning) return;
+
+        leftTurnTime += deltaTime * leftTurnSpeed;
+        const turnUpDuration = 0.2;
+        const turnDownDuration = 0.2;
+        const totalDuration = turnUpDuration + turnDownDuration;
+
+        let progress = 0;
+        if (leftTurnTime < turnUpDuration) {
+          const t = leftTurnTime / turnUpDuration;
+          progress = 1 - (1 - t) * (1 - t);
+        } else if (leftTurnTime < totalDuration) {
+          const t = (leftTurnTime - turnUpDuration) / turnDownDuration;
+          progress = 1 - t * t;
+        } else {
+          resetLeftTurn();
+          return;
+        }
+
+        if (boneParams.Pelvis && skierBones.Pelvis) {
+          boneParams.Pelvis.y = leftTurnBaseValues.pelvisY + (leftTurnParams.pelvisY - leftTurnBaseValues.pelvisY) * progress;
+          updateBoneRotation("Pelvis");
+          updateBoneSlider("Pelvis", "Y");
+        }
+
+        if (boneParams.Head && skierBones.Head) {
+          boneParams.Head.y = leftTurnBaseValues.headY + (leftTurnParams.headY - leftTurnBaseValues.headY) * progress;
+          updateBoneRotation("Head");
+          updateBoneSlider("Head", "Y");
+        }
+      }
+
       function animate() {
         requestAnimationFrame(animate);
+
+        const deltaTime = 0.016; // ~60fps
+        updateAnimations(deltaTime);
+        updateJumpAnimation(deltaTime);
+        updateRightTurnAnimation(deltaTime);
+        updateLeftTurnAnimation(deltaTime);
+
         controls.update();
         renderer.render(scene, camera);
       }
