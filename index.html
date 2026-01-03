@@ -37,6 +37,12 @@
         flex-direction: column;
         justify-content: space-between;
         padding: 20px;
+        opacity: 0;
+        transition: opacity 0.5s ease-in;
+      }
+
+      #ui-layer.visible {
+        opacity: 1;
       }
 
       #score-board {
@@ -101,6 +107,191 @@
         border-radius: 20px;
         text-align: center;
         box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      }
+
+      /* Start Screen */
+      #start-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 3000;
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-image: url("/assets/images/bg.png");
+        transition: opacity 0.5s ease-out;
+      }
+
+      #start-screen.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      /* Mobile background */
+      @media (max-width: 768px) {
+        #start-screen {
+          background-image: url("/assets/images/bg-mobile.png");
+        }
+      }
+
+      #start-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 30px;
+        padding: 20px;
+        text-align: center;
+        animation: fadeInUp 1s ease-out;
+        position: relative;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+      }
+
+      @media (max-width: 768px) {
+        #start-content {
+          justify-content: flex-start;
+          padding-top: 40px;
+          gap: 25px;
+        }
+      }
+
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      #title-image {
+        max-width: 90%;
+        width: 600px;
+        height: auto;
+        filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.3));
+        animation: titleFloat 3s ease-in-out infinite;
+      }
+
+      @keyframes titleFloat {
+        0%,
+        100% {
+          transform: translateY(0px);
+        }
+        50% {
+          transform: translateY(-10px);
+        }
+      }
+
+      @media (max-width: 768px) {
+        #title-image {
+          width: 80%;
+          max-width: 400px;
+          margin-top: 0;
+        }
+      }
+
+      #character-image {
+        max-width: 250px;
+        height: auto;
+        filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.2));
+        position: absolute;
+        bottom: 0;
+        left: 50px;
+        transform: translateX(0);
+        z-index: 10;
+      }
+
+      @media (max-width: 768px) {
+        #character-image {
+          max-width: 260px;
+          left: 20px;
+          transform: translateX(0);
+        }
+      }
+
+      #start-button {
+        background: linear-gradient(135deg, #e8f4f8, #b8d4e3);
+        color: #2c3e50;
+        border: 3px solid #ffffff;
+        padding: 20px 50px;
+        font-size: 1.6rem;
+        font-weight: bold;
+        border-radius: 20px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-family: "Segoe UI", monospace;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2),
+          inset 0 2px 10px rgba(255, 255, 255, 0.8),
+          0 0 0 2px rgba(255, 255, 255, 0.3);
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      #start-button::before {
+        content: "";
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(
+          45deg,
+          transparent 30%,
+          rgba(255, 255, 255, 0.3) 50%,
+          transparent 70%
+        );
+        transform: rotate(45deg);
+        transition: all 0.5s ease;
+        opacity: 0;
+      }
+
+      #start-button:hover::before {
+        opacity: 1;
+        animation: shimmer 1.5s infinite;
+      }
+
+      @keyframes shimmer {
+        0% {
+          transform: translateX(-100%) translateY(-100%) rotate(45deg);
+        }
+        100% {
+          transform: translateX(100%) translateY(100%) rotate(45deg);
+        }
+      }
+
+      #start-button:hover {
+        background: linear-gradient(135deg, #ffffff, #d4e8f0);
+        transform: scale(1.05);
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3),
+          inset 0 2px 10px rgba(255, 255, 255, 0.9),
+          0 0 0 3px rgba(255, 255, 255, 0.5);
+        border-color: #ffffff;
+      }
+
+      #start-button:active {
+        transform: scale(0.98);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2),
+          inset 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      @media (max-width: 768px) {
+        #start-button {
+          padding: 18px 40px;
+          font-size: 1.3rem;
+          border-radius: 18px;
+        }
       }
 
       #game-over-title {
@@ -269,6 +460,11 @@
         transition: all 0.3s ease;
         z-index: 1000;
         margin-left: -60px;
+        opacity: 0;
+      }
+
+      #settings-button.visible {
+        opacity: 1;
       }
 
       #settings-button:hover {
@@ -298,6 +494,11 @@
         transition: all 0.3s ease;
         z-index: 1000;
         margin-left: 60px;
+        opacity: 0;
+      }
+
+      #pause-button.visible {
+        opacity: 1;
       }
 
       #pause-button:hover {
@@ -361,6 +562,19 @@
     </style>
   </head>
   <body>
+    <!-- Start Screen -->
+    <div id="start-screen">
+      <div id="start-content">
+        <img
+          id="title-image"
+          src="/assets/images/title.png"
+          alt="Alpine Rush"
+        />
+        <img id="character-image" src="/assets/images/ana.png" alt="Ana" />
+        <button id="start-button">Start Game</button>
+      </div>
+    </div>
+
     <div id="crash-overlay"></div>
     <div id="jump-msg">JUMP!</div>
 
@@ -671,12 +885,13 @@
       let isCrashing = false;
       let crashTime = 0;
 
-      let gameActive = true;
+      let gameActive = false; // Start as false until start button is clicked
       let isPaused = false;
       let lives = 3;
       let isGameOver = false;
       let skierRollAwayRotation = 0;
       let crashCooldown = false; // Prevent multiple crashes in quick succession
+      let gameStarted = false; // Track if game has been started
 
       // Audio system
       let musicEnabled = true;
@@ -959,6 +1174,45 @@
         return new THREE.CanvasTexture(canvas);
       }
 
+      // --- START SCREEN ---
+      function startGame() {
+        const startScreen = document.getElementById("start-screen");
+        if (startScreen) {
+          startScreen.classList.add("hidden");
+
+          // Wait for fade out animation before starting game
+          setTimeout(() => {
+            startScreen.style.display = "none";
+          }, 500);
+        }
+
+        // Show game UI elements
+        const uiLayer = document.getElementById("ui-layer");
+        if (uiLayer) {
+          uiLayer.classList.add("visible");
+        }
+
+        const settingsButton = document.getElementById("settings-button");
+        if (settingsButton) {
+          settingsButton.classList.add("visible");
+        }
+
+        const pauseButton = document.getElementById("pause-button");
+        if (pauseButton) {
+          pauseButton.classList.add("visible");
+        }
+
+        // Initialize audio on start
+        if (!audioInitialized) {
+          initAudio();
+          audioInitialized = true;
+        }
+
+        // Start the game
+        gameActive = true;
+        gameStarted = true;
+      }
+
       // --- INITIALIZATION ---
       function init() {
         // Load high score
@@ -966,6 +1220,12 @@
 
         // Initialize lives display
         updateLivesDisplay();
+
+        // Setup start button
+        const startButton = document.getElementById("start-button");
+        if (startButton) {
+          startButton.addEventListener("click", startGame);
+        }
 
         // Setup retry button
         const retryButton = document.getElementById("retry-button");
