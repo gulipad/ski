@@ -59,6 +59,88 @@
         font-weight: bold;
       }
 
+      #high-score {
+        font-size: 1rem;
+        color: #666;
+        margin-top: 5px;
+        text-shadow: 0 0 2px white;
+      }
+
+      #lives {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        color: #2c3e50;
+        font-size: 1.5rem;
+        font-weight: 800;
+        text-shadow: 0 0 2px white;
+      }
+
+      #game-over-screen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        pointer-events: auto;
+      }
+
+      #game-over-screen.visible {
+        display: flex;
+      }
+
+      #game-over-content {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 40px;
+        border-radius: 20px;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      }
+
+      #game-over-title {
+        font-size: 3rem;
+        font-weight: 900;
+        color: #2c3e50;
+        margin-bottom: 20px;
+      }
+
+      #final-score {
+        font-size: 2rem;
+        color: #555;
+        margin-bottom: 10px;
+      }
+
+      #high-score-display {
+        font-size: 1.5rem;
+        color: #f1c40f;
+        margin-bottom: 30px;
+        font-weight: bold;
+      }
+
+      #retry-button {
+        background: #3498db;
+        color: white;
+        border: none;
+        padding: 15px 40px;
+        font-size: 1.2rem;
+        font-weight: bold;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-family: "Segoe UI", monospace;
+      }
+
+      #retry-button:hover {
+        background: #2980b9;
+        transform: scale(1.05);
+      }
+
       /* Debug Panel */
       #debug-panel {
         position: absolute;
@@ -165,11 +247,137 @@
         pointer-events: none;
         transition: opacity 0.2s;
       }
+
+      /* Settings Menu */
+      #settings-button {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 50px;
+        height: 50px;
+        background: rgba(0, 0, 0, 0.7);
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 12px;
+        cursor: pointer;
+        pointer-events: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        color: white;
+        transition: all 0.3s ease;
+        z-index: 1000;
+        margin-left: -60px;
+      }
+
+      #settings-button:hover {
+        background: rgba(0, 0, 0, 0.9);
+        border-color: rgba(255, 255, 255, 0.5);
+        transform: translateX(-50%) scale(1.1);
+      }
+
+      /* Pause/Play Button */
+      #pause-button {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 50px;
+        height: 50px;
+        background: rgba(0, 0, 0, 0.7);
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 12px;
+        cursor: pointer;
+        pointer-events: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        color: white;
+        transition: all 0.3s ease;
+        z-index: 1000;
+        margin-left: 60px;
+      }
+
+      #pause-button:hover {
+        background: rgba(0, 0, 0, 0.9);
+        border-color: rgba(255, 255, 255, 0.5);
+        transform: translateX(-50%) scale(1.1);
+      }
+
+      #settings-menu {
+        position: absolute;
+        bottom: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.9);
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 12px;
+        padding: 20px;
+        min-width: 200px;
+        pointer-events: auto;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+        z-index: 1000;
+      }
+
+      #settings-menu.visible {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      #settings-menu h3 {
+        color: #f1c40f;
+        margin: 0 0 15px 0;
+        font-size: 1rem;
+        text-align: center;
+      }
+
+      .settings-option {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        color: white;
+        font-size: 0.9rem;
+      }
+
+      .settings-option:last-child {
+        margin-bottom: 0;
+      }
+
+      .settings-option label {
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .settings-option input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
     <div id="crash-overlay"></div>
     <div id="jump-msg">JUMP!</div>
+
+    <!-- Settings Menu -->
+    <div id="pause-button" title="Pause">⏸️</div>
+    <div id="settings-button" title="Settings">⚙️</div>
+    <div id="settings-menu">
+      <h3>Settings</h3>
+      <div class="settings-option">
+        <label for="music-toggle">Music</label>
+        <input type="checkbox" id="music-toggle" checked />
+      </div>
+      <div class="settings-option">
+        <label for="sfx-toggle">Sound Effects</label>
+        <input type="checkbox" id="sfx-toggle" checked />
+      </div>
+    </div>
 
     <!-- Camera Debug Panel -->
     <div id="debug-panel" class="collapsed">
@@ -337,9 +545,25 @@
     </div>
 
     <div id="ui-layer">
+      <div id="lives">❤️❤️❤️</div>
       <div id="score-board">
         <div id="score">0</div>
         <div id="label">Meters</div>
+        <div id="high-score">Best: 0</div>
+      </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over-screen">
+      <div id="game-over-content">
+        <div id="game-over-title">Game Over</div>
+        <div id="final-score">
+          Distance: <span id="final-score-value">0</span>m
+        </div>
+        <div id="high-score-display">
+          Best: <span id="high-score-value">0</span>m
+        </div>
+        <button id="retry-button">Retry</button>
       </div>
     </div>
 
@@ -347,7 +571,8 @@
       // --- CONFIGURATION ---
       const CONFIG = {
         baseSpeed: 0.003,
-        maxSpeed: 0.003,
+        maxSpeed: 0.006, // Maximum speed (2x base speed)
+        accelerationRate: 0.000001, // Very slight acceleration per frame
         turnSpeed: 0.25,
         worldRadius: 100,
         spawnInterval: 0.18,
@@ -447,7 +672,222 @@
       let crashTime = 0;
 
       let gameActive = true;
+      let isPaused = false;
+      let lives = 3;
+      let isGameOver = false;
+      let skierRollAwayRotation = 0;
+      let crashCooldown = false; // Prevent multiple crashes in quick succession
+
+      // Audio system
+      let musicEnabled = true;
+      let sfxEnabled = true;
+      let backgroundMusic = null;
+      let ambientSound = null;
+      let ambientSoundBaseVolume = 0.6; // Store base volume for restoration
+      let soundEffects = {
+        jump: null,
+        crash: null,
+        leftTurn: null,
+        rightTurn: null,
+        ouch3: null,
+        thump: null,
+        ohNo: null,
+      };
+
+      // Cookie helper functions
+      function setCookie(name, value, days = 365) {
+        const expires = new Date();
+        expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+        document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+      }
+
+      function getCookie(name) {
+        const nameEQ = name + "=";
+        const ca = document.cookie.split(";");
+        for (let i = 0; i < ca.length; i++) {
+          let c = ca[i];
+          while (c.charAt(0) === " ") c = c.substring(1, c.length);
+          if (c.indexOf(nameEQ) === 0)
+            return c.substring(nameEQ.length, c.length);
+        }
+        return null;
+      }
+
+      // Load audio settings from cookies
+      function loadAudioSettings() {
+        const musicCookie = getCookie("musicEnabled");
+        const sfxCookie = getCookie("sfxEnabled");
+
+        if (musicCookie !== null) {
+          musicEnabled = musicCookie === "true";
+        }
+        if (sfxCookie !== null) {
+          sfxEnabled = sfxCookie === "true";
+        }
+
+        // Update UI
+        document.getElementById("music-toggle").checked = musicEnabled;
+        document.getElementById("sfx-toggle").checked = sfxEnabled;
+      }
+
+      // Save audio settings to cookies
+      function saveAudioSettings() {
+        setCookie("musicEnabled", musicEnabled);
+        setCookie("sfxEnabled", sfxEnabled);
+      }
+
+      // Initialize audio
+      function initAudio() {
+        // Background music
+        backgroundMusic = new Audio("/assets/audio/music.mp3");
+        backgroundMusic.loop = true;
+        backgroundMusic.volume = 0.5;
+
+        // Ambient snow sliding sound
+        ambientSound = new Audio("/assets/audio/snow-sliding.mp3");
+        ambientSound.loop = true;
+        ambientSound.volume = ambientSoundBaseVolume;
+
+        // Sound effects
+        soundEffects.jump = new Audio("/assets/audio/jump.mp3");
+        soundEffects.jump.volume = 0.6;
+
+        soundEffects.crash = new Audio("/assets/audio/crash.mp3");
+        soundEffects.crash.volume = 0.7;
+
+        soundEffects.leftTurn = new Audio("/assets/audio/turn.mp3");
+        soundEffects.leftTurn.volume = 0.4;
+
+        soundEffects.rightTurn = new Audio("/assets/audio/turn.mp3");
+        soundEffects.rightTurn.volume = 0.4;
+
+        soundEffects.ouch3 = new Audio("/assets/audio/ouch_3.mp3");
+        soundEffects.ouch3.volume = 0.7;
+
+        soundEffects.thump = new Audio("/assets/audio/thump.mp3");
+        soundEffects.thump.volume = 0.6;
+
+        soundEffects.ohNo = new Audio("/assets/audio/oh_no.mp3");
+        soundEffects.ohNo.volume = 0.7;
+
+        // Start music if enabled
+        if (musicEnabled) {
+          backgroundMusic.play().catch((err) => {
+            console.log("Music autoplay prevented:", err);
+          });
+        }
+
+        // Start ambient sound if SFX enabled
+        if (sfxEnabled) {
+          ambientSound.play().catch((err) => {
+            console.log("Ambient sound autoplay prevented:", err);
+          });
+        }
+      }
+
+      // Play sound effect
+      function playSound(soundName) {
+        if (!sfxEnabled || !soundEffects[soundName]) return;
+
+        const sound = soundEffects[soundName].cloneNode();
+        sound.volume = soundEffects[soundName].volume;
+        sound.play().catch((err) => {
+          console.log(`Sound effect ${soundName} failed:`, err);
+        });
+      }
+
+      // Settings menu toggle
+      function setupSettingsMenu() {
+        const settingsButton = document.getElementById("settings-button");
+        const settingsMenu = document.getElementById("settings-menu");
+        const musicToggle = document.getElementById("music-toggle");
+        const sfxToggle = document.getElementById("sfx-toggle");
+
+        settingsButton.addEventListener("click", () => {
+          settingsMenu.classList.toggle("visible");
+        });
+
+        // Close menu when clicking outside
+        document.addEventListener("click", (e) => {
+          if (
+            !settingsMenu.contains(e.target) &&
+            !settingsButton.contains(e.target)
+          ) {
+            settingsMenu.classList.remove("visible");
+          }
+        });
+
+        // Music toggle
+        musicToggle.addEventListener("change", (e) => {
+          musicEnabled = e.target.checked;
+          saveAudioSettings();
+
+          if (musicEnabled && backgroundMusic) {
+            backgroundMusic.play().catch((err) => {
+              console.log("Music play failed:", err);
+            });
+          } else if (backgroundMusic) {
+            backgroundMusic.pause();
+          }
+        });
+
+        // SFX toggle (controls both sound effects and ambient sound)
+        sfxToggle.addEventListener("change", (e) => {
+          sfxEnabled = e.target.checked;
+          saveAudioSettings();
+
+          // Control ambient sound with SFX toggle
+          if (sfxEnabled && ambientSound) {
+            ambientSound.play().catch((err) => {
+              console.log("Ambient sound play failed:", err);
+            });
+          } else if (ambientSound) {
+            ambientSound.pause();
+          }
+        });
+      }
       let score = 0;
+      let highScore = 0;
+
+      // Load high score from localStorage
+      function loadHighScore() {
+        const stored = localStorage.getItem("skiGameHighScore");
+        if (stored !== null) {
+          highScore = parseInt(stored, 10);
+          updateHighScoreDisplay();
+        }
+      }
+
+      // Save high score to localStorage
+      function saveHighScore() {
+        if (score > highScore) {
+          highScore = score;
+          localStorage.setItem("skiGameHighScore", highScore.toString());
+          updateHighScoreDisplay();
+        }
+      }
+
+      // Update high score display
+      function updateHighScoreDisplay() {
+        const highScoreElement = document.getElementById("high-score");
+        if (highScoreElement) {
+          highScoreElement.textContent = `Best: ${Math.floor(highScore)}m`;
+        }
+        const highScoreValueElement =
+          document.getElementById("high-score-value");
+        if (highScoreValueElement) {
+          highScoreValueElement.textContent = Math.floor(highScore);
+        }
+      }
+
+      // Update lives display
+      function updateLivesDisplay() {
+        const livesElement = document.getElementById("lives");
+        if (livesElement) {
+          const hearts = "❤️".repeat(lives) + "🤍".repeat(3 - lives);
+          livesElement.textContent = hearts;
+        }
+      }
       let currentRotationSpeed = CONFIG.baseSpeed;
 
       let currentLane = 0;
@@ -465,14 +905,31 @@
       let activeBarriers = [];
       let activeBoundaries = [];
 
+      // Detect mobile device
+      function isMobile() {
+        return (
+          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+            navigator.userAgent
+          ) || window.innerWidth <= 768
+        );
+      }
+
       // Camera State (User Values applied here)
-      let camParams = {
-        y: 114,
-        z: 42,
-        lookY: 92,
-        lookZ: -9,
-        fov: 38,
-      };
+      let camParams = isMobile()
+        ? {
+            y: 106,
+            z: 19,
+            lookY: 92,
+            lookZ: -13,
+            fov: 90,
+          }
+        : {
+            y: 114,
+            z: 42,
+            lookY: 92,
+            lookZ: -9,
+            fov: 38,
+          };
 
       // Skier Transform State
       let skierParams = {
@@ -504,6 +961,32 @@
 
       // --- INITIALIZATION ---
       function init() {
+        // Load high score
+        loadHighScore();
+
+        // Initialize lives display
+        updateLivesDisplay();
+
+        // Setup retry button
+        const retryButton = document.getElementById("retry-button");
+        if (retryButton) {
+          retryButton.addEventListener("click", restartGame);
+        }
+
+        // Setup pause button
+        const pauseButton = document.getElementById("pause-button");
+        if (pauseButton) {
+          pauseButton.addEventListener("click", togglePause);
+        }
+
+        // Load audio settings from cookies
+        loadAudioSettings();
+
+        // Setup settings menu
+        setupSettingsMenu();
+
+        // Initialize audio (after user interaction)
+        // Audio will be initialized on first user interaction
         // Load models
         loadTreeModel();
         loadRockModel();
@@ -1588,18 +2071,23 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         const lanes = [0, 1, 2];
         lanes.sort(() => Math.random() - 0.5);
 
-        if (rand < 0.5) {
+        // Ensure at least one lane is always clear (max 2 obstacles per row)
+        if (rand < 0.4) {
+          // 40% chance: 1 tree
           spawnTree(angle, false, lanes[0]);
-        } else if (rand < 0.7) {
+        } else if (rand < 0.65) {
+          // 25% chance: 2 trees (leaves 1 lane clear)
           spawnTree(angle, false, lanes[0]);
           spawnTree(angle, false, lanes[1]);
-        } else if (rand < 0.85) {
+        } else if (rand < 0.8) {
+          // 15% chance: 1 barrier
           spawnBarrier(angle, lanes[0]);
         } else {
+          // 20% chance: 1 tree + 1 barrier (in different lanes, leaves 1 lane clear)
           spawnTree(angle, false, lanes[0]);
           spawnBarrier(angle, lanes[1]);
         }
-        // Always spawn a decoration tree further out
+        // Always spawn a decoration tree further out (not in lanes)
         spawnTree(angle, true);
       }
 
@@ -1646,30 +2134,64 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       function animate() {
         requestAnimationFrame(animate);
 
-        // Update animation mixer
+        // Update animation mixer (only if not paused)
         const delta = clock.getDelta();
-        if (mixer) {
+        if (!isPaused && mixer) {
           mixer.update(delta);
         }
 
-        // Update subtle bone animations
-        updateSubtleAnimations(delta);
+        // Update subtle bone animations (only if not paused)
+        if (!isPaused) {
+          updateSubtleAnimations(delta);
+        }
 
-        // Update jump animation
-        updateJumpAnimation(delta);
+        // Update jump animation (only if not paused)
+        if (!isPaused) {
+          updateJumpAnimation(delta);
+        }
 
-        // Update crash animation
-        updateCrashAnimation(delta);
+        // Update crash animation (only if not paused)
+        if (!isPaused) {
+          updateCrashAnimation(delta);
+        }
 
-        // Update turn animations
-        updateRightTurnAnimation(delta);
-        updateLeftTurnAnimation(delta);
+        // Update turn animations (only if not paused)
+        if (!isPaused) {
+          updateRightTurnAnimation(delta);
+          updateLeftTurnAnimation(delta);
+        }
 
-        if (gameActive) update();
+        // World rotation (only if not paused)
+        if (!isPaused) {
+          worldSphere.rotation.x -= currentRotationSpeed;
+        }
+        const totalRotation = -worldSphere.rotation.x;
+
+        if (gameActive && !isPaused) update();
+
+        // Skier roll away animation when game over (outside update so it continues)
+        if (isGameOver) {
+          skierRollAwayRotation += 0.05;
+          playerGroup.rotation.x += 0.02;
+          playerGroup.rotation.z += 0.03;
+          playerGroup.position.y -= 0.1;
+          // Rotate skier away
+          player.rotation.x += 0.05;
+          player.rotation.z += 0.08;
+        }
+
         renderer.render(scene, camera);
       }
 
       function update() {
+        // Gradually increase speed over time (very slight acceleration)
+        if (currentRotationSpeed < CONFIG.maxSpeed) {
+          currentRotationSpeed += CONFIG.accelerationRate;
+          if (currentRotationSpeed > CONFIG.maxSpeed) {
+            currentRotationSpeed = CONFIG.maxSpeed;
+          }
+        }
+
         const dx = targetX - player.position.x;
         player.position.x += dx * CONFIG.turnSpeed;
 
@@ -1681,6 +2203,11 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
             playerHeight = 0;
             isJumping = false;
             verticalVelocity = 0;
+
+            // Restore ambient sound volume when jump ends
+            if (ambientSound && sfxEnabled) {
+              ambientSound.volume = ambientSoundBaseVolume;
+            }
           }
         }
         player.position.y = CONFIG.worldRadius + playerHeight;
@@ -1690,32 +2217,51 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         if (isJumping) player.rotation.x = -0.5;
         else player.rotation.x = 0;
 
-        worldSphere.rotation.x -= currentRotationSpeed;
+        // Get total rotation from world sphere (already updated in animate loop)
         const totalRotation = -worldSphere.rotation.x;
 
-        score += currentRotationSpeed * 100;
-        document.getElementById("score").innerText = Math.floor(score);
+        // Only update score if game is active
+        if (gameActive) {
+          score += currentRotationSpeed * 100;
+          document.getElementById("score").innerText = Math.floor(score);
+        }
 
-        checkCollisions();
+        // Only check collisions if game is active
+        if (gameActive) {
+          checkCollisions();
+        }
 
-        // Spawn Obstacles
-        if (totalRotation - lastSpawnRotation > CONFIG.spawnInterval) {
+        // Spawn Obstacles (only if game is active and not paused)
+        // Note: totalRotation is now calculated in animate loop, so we need to recalculate here
+        const totalRotationForSpawn = -worldSphere.rotation.x;
+        if (
+          gameActive &&
+          !isPaused &&
+          totalRotationForSpawn - lastSpawnRotation > CONFIG.spawnInterval
+        ) {
           // FIXED SPAWN ANGLE: 0.5 is closer to camera than 1.5.
           // 1.5 was spawning behind the new cleanup threshold.
           const spawnAngle = -worldSphere.rotation.x + 0.5;
           spawnRow(spawnAngle);
-          lastSpawnRotation = totalRotation;
+          lastSpawnRotation = totalRotationForSpawn;
         }
 
-        // Spawn Boundaries
-        if (totalRotation - lastBoundaryRotation > CONFIG.boundaryInterval) {
+        // Spawn Boundaries (only if game is active and not paused)
+        if (
+          gameActive &&
+          !isPaused &&
+          totalRotationForSpawn - lastBoundaryRotation > CONFIG.boundaryInterval
+        ) {
           const bAngle = -worldSphere.rotation.x + 0.5;
           spawnBoundary(bAngle);
-          lastBoundaryRotation = totalRotation;
+          lastBoundaryRotation = totalRotationForSpawn;
         }
 
-        updateParticles();
-        cleanupObjects();
+        // Update particles and cleanup (only if not paused)
+        if (!isPaused) {
+          updateParticles();
+          cleanupObjects();
+        }
       }
 
       function cleanupObjects() {
@@ -1775,6 +2321,18 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function triggerCrash() {
+        if (isGameOver || crashCooldown) return; // Don't process crashes if game is already over or in cooldown
+
+        // Set cooldown to prevent multiple crashes
+        crashCooldown = true;
+        setTimeout(() => {
+          crashCooldown = false;
+        }, 1000); // 1 second cooldown
+
+        // Decrement lives
+        lives--;
+        updateLivesDisplay();
+
         const overlay = document.getElementById("crash-overlay");
         overlay.style.opacity = 0.5;
         setTimeout(() => {
@@ -1783,11 +2341,203 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
 
         // Start crash animation
         startCrashAnimation();
+
+        // Play crash sound: ouch_3
+        playSound("ouch3");
+
+        // Check if game over
+        if (lives <= 0) {
+          gameOver();
+        }
+      }
+
+      function gameOver() {
+        isGameOver = true;
+        gameActive = false;
+
+        // Play game over sound
+        playSound("ohNo");
+
+        // Save high score
+        saveHighScore();
+
+        // Show game over screen
+        const gameOverScreen = document.getElementById("game-over-screen");
+        const finalScoreValue = document.getElementById("final-score-value");
+        if (gameOverScreen && finalScoreValue) {
+          finalScoreValue.textContent = Math.floor(score);
+          gameOverScreen.classList.add("visible");
+        }
+      }
+
+      function togglePause() {
+        if (isGameOver) return; // Can't pause when game is over
+
+        isPaused = !isPaused;
+        const pauseButton = document.getElementById("pause-button");
+        if (pauseButton) {
+          if (isPaused) {
+            pauseButton.textContent = "▶️";
+            pauseButton.title = "Resume";
+            // Pause ambient sound
+            if (ambientSound && !ambientSound.paused) {
+              ambientSound.pause();
+            }
+            // Pause background music
+            if (backgroundMusic && !backgroundMusic.paused) {
+              backgroundMusic.pause();
+            }
+          } else {
+            pauseButton.textContent = "⏸️";
+            pauseButton.title = "Pause";
+            // Resume ambient sound if SFX enabled
+            if (ambientSound && sfxEnabled) {
+              ambientSound.play().catch((err) => {
+                console.log("Ambient sound resume failed:", err);
+              });
+            }
+            // Resume background music if music enabled
+            if (backgroundMusic && musicEnabled) {
+              backgroundMusic.play().catch((err) => {
+                console.log("Music resume failed:", err);
+              });
+            }
+          }
+        }
+      }
+
+      function restartGame() {
+        // Reset game state
+        lives = 3;
+        score = 0;
+        isGameOver = false;
+        gameActive = true;
+        isPaused = false;
+        skierRollAwayRotation = 0;
+
+        // Reset pause button
+        const pauseButton = document.getElementById("pause-button");
+        if (pauseButton) {
+          pauseButton.textContent = "⏸️";
+          pauseButton.title = "Pause";
+        }
+
+        // Reset player position and rotation
+        player.position.x = 0;
+        player.position.y = CONFIG.worldRadius;
+        player.rotation.x = 0;
+        player.rotation.y = Math.PI;
+        player.rotation.z = 0;
+        playerGroup.rotation.x = 0;
+        playerGroup.rotation.y = 0;
+        playerGroup.rotation.z = 0;
+
+        // Reset skier bones to skiing pose
+        applySkiingPose();
+
+        // Reset jump state
+        isJumping = false;
+        verticalVelocity = 0;
+        playerHeight = 0;
+
+        // Reset crash state
+        isCrashing = false;
+        crashTime = 0;
+        crashCooldown = false;
+
+        // Reset turn states
+        isRightTurning = false;
+        isLeftTurning = false;
+        rightTurnTime = 0;
+        leftTurnTime = 0;
+
+        // Reset lane
+        currentLane = 0;
+        targetX = 0;
+
+        // Reset world rotation and speed
+        worldSphere.rotation.x = 0;
+        currentRotationSpeed = CONFIG.baseSpeed;
+        lastSpawnRotation = 0;
+        lastBoundaryRotation = 0;
+
+        // Reset animation time
+        animationTime = 0;
+        jumpAnimationTime = 0;
+        crashTime = 0;
+        rightTurnTime = 0;
+        leftTurnTime = 0;
+
+        // Clear obstacles - remove from worldSphere (they're children of worldSphere)
+        activeObstacles.forEach((obj) => {
+          if (obj.mesh && obj.mesh.parent) {
+            obj.mesh.parent.remove(obj.mesh);
+          }
+        });
+        activeObstacles = [];
+
+        activeBarriers.forEach((obj) => {
+          if (obj.mesh && obj.mesh.parent) {
+            obj.mesh.parent.remove(obj.mesh);
+          }
+        });
+        activeBarriers = [];
+
+        activeBoundaries.forEach((obj) => {
+          if (obj.mesh && obj.mesh.parent) {
+            obj.mesh.parent.remove(obj.mesh);
+          }
+        });
+        activeBoundaries = [];
+
+        // Reset score display
+        document.getElementById("score").innerText = "0";
+        updateLivesDisplay();
+        updateHighScoreDisplay();
+
+        // Hide game over screen
+        const gameOverScreen = document.getElementById("game-over-screen");
+        if (gameOverScreen) {
+          gameOverScreen.classList.remove("visible");
+        }
+
+        // Spawn initial trees and boundaries for new game
+        spawnInitialTrees();
       }
 
       function startCrashAnimation() {
         if (!boneParams.L_Thigh || !boneParams.R_Thigh || !boneParams.Head)
           return;
+
+        // If crashing during a jump, reset jump animation state first
+        if (isJumping) {
+          isJumping = false;
+          verticalVelocity = 0;
+          playerHeight = 0;
+          // Reset jump animation bones to skiing pose values
+          if (boneParams.L_Upperarm) {
+            boneParams.L_Upperarm.z = -1.03; // From skiing pose
+            updateBoneRotation("L_Upperarm");
+          }
+          if (boneParams.R_Upperarm) {
+            boneParams.R_Upperarm.z = 0.88; // From skiing pose
+            updateBoneRotation("R_Upperarm");
+          }
+          if (boneParams.L_Thigh) {
+            boneParams.L_Thigh.y = 0.01; // From skiing pose
+            updateBoneRotation("L_Thigh");
+          }
+          if (boneParams.R_Thigh) {
+            boneParams.R_Thigh.y = 0.03; // From skiing pose
+            updateBoneRotation("R_Thigh");
+          }
+          // Reset jump base values to skiing pose
+          lUpperarmBaseZ = -1.03;
+          rUpperarmBaseZ = 0.88;
+          lThighBaseY = 0.01;
+          rThighBaseY = 0.03;
+          jumpAnimationTime = 0;
+        }
 
         // Store base values (current position)
         if (boneParams.Pelvis) crashBaseValues.pelvisZ = boneParams.Pelvis.z;
@@ -1811,6 +2561,20 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       function resetCrashAnimation() {
         if (!boneParams.L_Thigh || !boneParams.R_Thigh || !boneParams.Head)
           return;
+
+        // Ensure jump state is reset
+        if (isJumping) {
+          isJumping = false;
+          verticalVelocity = 0;
+          playerHeight = 0;
+        }
+
+        // Reset jump animation base values to skiing pose
+        lUpperarmBaseZ = -1.03;
+        rUpperarmBaseZ = 0.88;
+        lThighBaseY = 0.01;
+        rThighBaseY = 0.03;
+        jumpAnimationTime = 0;
 
         // Reset to skiing pose values (not crash base values, which may include animation offsets)
         // Use the same values from applySkiingPose()
@@ -1836,6 +2600,16 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           boneParams.R_Thigh.y = 0.03;
           boneParams.R_Thigh.z = 0.6;
           updateBoneRotation("R_Thigh");
+        }
+
+        // Reset jump animation bones to skiing pose
+        if (boneParams.L_Upperarm) {
+          boneParams.L_Upperarm.z = -1.03;
+          updateBoneRotation("L_Upperarm");
+        }
+        if (boneParams.R_Upperarm) {
+          boneParams.R_Upperarm.z = 0.88;
+          updateBoneRotation("R_Upperarm");
         }
 
         if (boneParams.Head) {
@@ -1980,7 +2754,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function moveLane(direction) {
-        if (!gameActive) return;
+        if (!gameActive || isGameOver || isPaused) return;
         currentLane += direction;
         if (currentLane < -1) currentLane = -1;
         if (currentLane > 1) currentLane = 1;
@@ -1989,8 +2763,17 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         // Start turn animation
         if (direction > 0) {
           startRightTurn();
+          playSound("rightTurn");
+          playSound("thump");
         } else if (direction < 0) {
           startLeftTurn();
+          playSound("leftTurn");
+          playSound("thump");
+        }
+
+        // Initialize audio on first interaction
+        if (typeof initAudioOnInteraction === "function") {
+          initAudioOnInteraction();
         }
       }
 
@@ -2089,13 +2872,24 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function jump() {
-        if (!gameActive) return;
+        if (!gameActive || isGameOver || isPaused) return;
         if (!isJumping) {
           isJumping = true;
           verticalVelocity = CONFIG.jumpStrength;
 
+          // Mute ambient sound during jump
+          if (ambientSound) {
+            ambientSound.volume = 0;
+          }
+
           // Start jump animation
           startJumpAnimation();
+          playSound("jump");
+
+          // Initialize audio on first interaction
+          if (typeof initAudioOnInteraction === "function") {
+            initAudioOnInteraction();
+          }
         }
       }
 
@@ -2233,7 +3027,27 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         }
       }
 
+      // Initialize audio on first user interaction (required for autoplay)
+      let audioInitialized = false;
+      function initAudioOnInteraction() {
+        if (!audioInitialized) {
+          initAudio();
+          audioInitialized = true;
+        }
+      }
+
       init();
+
+      // Listen for user interactions to enable audio
+      document.addEventListener("click", initAudioOnInteraction, {
+        once: true,
+      });
+      document.addEventListener("keydown", initAudioOnInteraction, {
+        once: true,
+      });
+      document.addEventListener("touchstart", initAudioOnInteraction, {
+        once: true,
+      });
     </script>
   </body>
 </html>
