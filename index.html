@@ -1377,11 +1377,11 @@
       // Camera State (User Values applied here)
       let camParams = isMobile()
         ? {
-            y: 106,
-            z: 19,
-            lookY: 92,
-            lookZ: -13,
-            fov: 90,
+            y: 112,
+            z: 26,
+            lookY: 57,
+            lookZ: -50,
+            fov: 93,
           }
         : {
             y: 114,
@@ -1570,10 +1570,25 @@
         );
         updateCamera();
 
-        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        // Mobile performance optimizations
+        const isMobileDevice = isMobile();
+        const pixelRatio = isMobileDevice
+          ? Math.min(window.devicePixelRatio, 1.5)
+          : window.devicePixelRatio;
+
+        renderer = new THREE.WebGLRenderer({
+          antialias: !isMobileDevice, // Disable antialiasing on mobile
+          alpha: false,
+          powerPreference: "high-performance",
+        });
+        renderer.setPixelRatio(pixelRatio); // Limit pixel ratio on mobile
         renderer.setSize(window.innerWidth, window.innerHeight);
+
+        // Shadows: reduce quality on mobile for better performance
         renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.shadowMap.type = isMobileDevice
+          ? THREE.BasicShadowMap
+          : THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
         // Lighting - match pose editor for consistent look
@@ -1583,8 +1598,10 @@
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
         dirLight.position.set(10, 20, 10);
         dirLight.castShadow = true;
-        dirLight.shadow.mapSize.width = 2048;
-        dirLight.shadow.mapSize.height = 2048;
+        // Reduce shadow map resolution on mobile (2048 -> 512)
+        const shadowMapSize = isMobileDevice ? 512 : 2048;
+        dirLight.shadow.mapSize.width = shadowMapSize;
+        dirLight.shadow.mapSize.height = shadowMapSize;
         dirLight.shadow.camera.near = 0.5;
         dirLight.shadow.camera.far = 200;
         dirLight.shadow.camera.left = -50;
@@ -1603,7 +1620,7 @@
           color: CONFIG.groundColor,
         });
         worldSphere = new THREE.Mesh(sphereGeo, sphereMat);
-        worldSphere.receiveShadow = true;
+        worldSphere.receiveShadow = !isMobile(); // Disable shadow receiving on mobile for performance
         scene.add(worldSphere);
 
         createPlayer();
@@ -2034,11 +2051,12 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
             skierModel.rotation.y = skierParams.rotY;
             skierModel.rotation.z = skierParams.rotZ;
 
-            // Enable shadows and brighten materials
+            // Enable shadows and brighten materials (disable on mobile for performance)
+            const enableShadows = !isMobile();
             skierModel.traverse((child) => {
               if (child.isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
+                child.castShadow = enableShadows;
+                child.receiveShadow = enableShadows;
 
                 // Fix dark materials - make them brighter and more responsive to light
                 if (child.material) {
@@ -2161,12 +2179,13 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         const suitMat = new THREE.MeshLambertMaterial({ color: 0xe67e22 });
         const skiMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
 
+        const enableShadows = !isMobile();
         const body = new THREE.Mesh(
           new THREE.CylinderGeometry(0.5, 0.3, 1.5, 8),
           suitMat
         );
         body.position.y = 0.75;
-        body.castShadow = true;
+        body.castShadow = enableShadows;
         playerGroup.add(body);
 
         const head = new THREE.Mesh(
@@ -2174,18 +2193,18 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           skinMat
         );
         head.position.y = 1.7;
-        head.castShadow = true;
+        head.castShadow = enableShadows;
         playerGroup.add(head);
 
         const skiGeo = new THREE.BoxGeometry(0.3, 0.1, 2.5);
         const skiL = new THREE.Mesh(skiGeo, skiMat);
         skiL.position.set(-0.4, 0.05, 0);
-        skiL.castShadow = true;
+        skiL.castShadow = enableShadows;
         playerGroup.add(skiL);
 
         const skiR = new THREE.Mesh(skiGeo, skiMat);
         skiR.position.set(0.4, 0.05, 0);
-        skiR.castShadow = true;
+        skiR.castShadow = enableShadows;
         playerGroup.add(skiR);
       }
 
@@ -2393,11 +2412,12 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         // Clone the GLB model
         const tree = treeModelTemplate.clone();
 
-        // Enable shadows on all meshes
+        // Enable shadows on all meshes (disable on mobile for performance)
+        const enableShadows = !isMobile();
         tree.traverse((child) => {
           if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
+            child.castShadow = enableShadows;
+            child.receiveShadow = enableShadows;
           }
         });
 
@@ -2457,11 +2477,12 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         // Clone the GLB model
         const rock = rockModelTemplate.clone();
 
-        // Enable shadows on all meshes
+        // Enable shadows on all meshes (disable on mobile for performance)
+        const enableShadows = !isMobile();
         rock.traverse((child) => {
           if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
+            child.castShadow = enableShadows;
+            child.receiveShadow = enableShadows;
           }
         });
 
@@ -2546,11 +2567,12 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         // Clone the GLB model
         const sign = signTemplate.clone();
 
-        // Enable shadows on all meshes
+        // Enable shadows on all meshes (disable on mobile for performance)
+        const enableShadows = !isMobile();
         sign.traverse((child) => {
           if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
+            child.castShadow = enableShadows;
+            child.receiveShadow = enableShadows;
           }
         });
 
@@ -2579,11 +2601,12 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         // Clone the GLB model
         const fence = fenceModelTemplate.clone();
 
-        // Enable shadows on all meshes
+        // Enable shadows on all meshes (disable on mobile for performance)
+        const enableShadows = !isMobile();
         fence.traverse((child) => {
           if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
+            child.castShadow = enableShadows;
+            child.receiveShadow = enableShadows;
           }
         });
 
@@ -2671,11 +2694,12 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         // Clone the GLB model
         const gift = giftModelTemplate.clone();
 
-        // Enable shadows on all meshes
+        // Enable shadows on all meshes (disable on mobile for performance)
+        const enableShadows = !isMobile();
         gift.traverse((child) => {
           if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
+            child.castShadow = enableShadows;
+            child.receiveShadow = enableShadows;
           }
         });
 
@@ -2809,8 +2833,20 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         }
       }
 
-      function animate() {
+      // Frame rate limiting for mobile
+      let lastFrameTime = 0;
+      const targetFPS = isMobile() ? 30 : 60; // 30 FPS on mobile, 60 on desktop
+      const frameInterval = 1000 / targetFPS;
+
+      function animate(currentTime) {
         requestAnimationFrame(animate);
+
+        // Frame rate limiting for mobile
+        const elapsed = currentTime - lastFrameTime;
+        if (elapsed < frameInterval) {
+          return; // Skip frame to maintain target FPS
+        }
+        lastFrameTime = currentTime - (elapsed % frameInterval);
 
         // Update animation mixer (only if not paused)
         const delta = clock.getDelta();
@@ -2934,22 +2970,29 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           lastBoundaryRotation = totalRotationForSpawn;
         }
 
-        // Spawn Gift (only if game is active, not paused, gift not collected, and score >= 1500m)
-        // Spawn first gift at 1500m, then every 250m after that (at 1500m, 1750m, 2000m, etc.)
+        // Spawn Gift (only if game is active, not paused, gift not collected)
+        // Desktop: first gift at 1500m, then every 250m after that
+        // Mobile: first gift at 1000m, then every 200m after that
+        const isMobileDevice = isMobile();
+        const firstGiftDistance = isMobileDevice ? 1000 : 1500;
+        const giftInterval = isMobileDevice ? 200 : 250;
+
         if (
           gameActive &&
           !isPaused &&
           !giftCollected &&
           !activeGift &&
-          score >= 1500
+          score >= firstGiftDistance
         ) {
-          const currentTwoFiftyMeterMark = Math.floor((score - 1500) / 250);
-          const lastTwoFiftyMeterMark = Math.floor(
-            (lastGiftSpawnDistance - 1500) / 250
+          const currentIntervalMark = Math.floor(
+            (score - firstGiftDistance) / giftInterval
+          );
+          const lastIntervalMark = Math.floor(
+            (lastGiftSpawnDistance - firstGiftDistance) / giftInterval
           );
 
-          // Spawn gift when crossing into a new 250m mark (starting from 1500m)
-          if (currentTwoFiftyMeterMark > lastTwoFiftyMeterMark) {
+          // Spawn gift when crossing into a new interval mark
+          if (currentIntervalMark > lastIntervalMark) {
             const giftAngle = -worldSphere.rotation.x + 0.5;
             spawnGift(giftAngle);
             lastGiftSpawnDistance = score;
