@@ -989,9 +989,9 @@
     <script>
       // --- CONFIGURATION ---
       const CONFIG = {
-        baseSpeed: 0.003,
-        maxSpeed: 0.006, // Maximum speed (2x base speed)
-        accelerationRate: 0.000001, // Very slight acceleration per frame
+        baseSpeed: 0.005, // Doubled from 0.003 for faster gameplay
+        maxSpeed: 0.009, // Maximum speed (2x base speed) - doubled from 0.006
+        accelerationRate: 0.0000015, // Doubled acceleration rate for faster progression
         turnSpeed: 0.25,
         worldRadius: 100,
         spawnInterval: 0.18,
@@ -1768,6 +1768,56 @@
         // Reset lives for new game
         lives = 3;
         updateLivesDisplay();
+
+        // Clear all obstacles and boundaries from previous game
+        // Recycle IDs for instanced objects
+        activeObstacles.forEach((obj) => {
+          if (obj.id !== undefined && treeInstances) {
+            setOnSphereInstance(treeInstances, obj.id, 0, 0, 0.0001, 0);
+            freeTreeIds.push(obj.id);
+          }
+        });
+        activeObstacles = [];
+
+        activeBarriers.forEach((obj) => {
+          if (obj.id !== undefined && rockInstances) {
+            setOnSphereInstance(rockInstances, obj.id, 0, 0, 0.0001, 0);
+            freeRockIds.push(obj.id);
+          }
+        });
+        activeBarriers = [];
+
+        activeBoundaries.forEach((obj) => {
+          if (obj.id !== undefined && obj.instancer) {
+            setOnSphereInstance(obj.instancer, obj.id, 0, 0, 0.0001, 0);
+            if (obj.type === "fence") {
+              freeFenceIds.push(obj.id);
+            } else if (obj.signType === "red") {
+              freeRedSignIds.push(obj.id);
+            } else if (obj.signType === "blue") {
+              freeBlueSignIds.push(obj.id);
+            }
+          }
+        });
+        activeBoundaries = [];
+
+        // Update instance matrices
+        if (treeInstances) treeInstances.instanceMatrix.needsUpdate = true;
+        if (rockInstances) rockInstances.instanceMatrix.needsUpdate = true;
+        if (fenceInstances) fenceInstances.instanceMatrix.needsUpdate = true;
+        if (redSignInstances)
+          redSignInstances.instanceMatrix.needsUpdate = true;
+        if (blueSignInstances)
+          blueSignInstances.instanceMatrix.needsUpdate = true;
+
+        // Reset world rotation and spawn tracking
+        worldSphere.rotation.x = 0;
+        lastSpawnRotation = 0;
+        lastBoundaryRotation = 0;
+
+        // Spawn initial trees and boundaries for new game
+        spawnInitialTrees();
+        spawnInitialBoundariesIfNeeded();
 
         // Start the game
         gameActive = true;
