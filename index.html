@@ -1091,6 +1091,8 @@
       let crashCooldown = false; // Prevent multiple crashes in quick succession
       let crashCooldownTimeout = null; // Store timeout ID to clear it on restart
       let gameStarted = false; // Track if game has been started
+      let bonesDirty = false; // Track if bones need skeleton update
+      let wasJumping = false; // Track previous jump state to detect jump end
 
       // Asset loading tracker
       const assetLoadingState = {
@@ -1136,6 +1138,8 @@
       let backgroundMusic = null;
       let ambientSound = null;
       let ambientSoundBaseVolume = 0.6; // Store base volume for restoration
+      let wasMusicPlaying = false; // Track if music was playing before page was hidden
+      let wasAmbientPlaying = false; // Track if ambient was playing before page was hidden
       let soundEffects = {
         jump: null,
         crash: null,
@@ -1292,6 +1296,86 @@
       function stopAmbientSound() {
         if (ambientSound && !ambientSound.paused) {
           ambientSound.pause();
+        }
+      }
+
+      // Pause audio when page becomes hidden (but don't reset, so we can resume)
+      function pauseAudioOnHide() {
+        // Track what was playing
+        wasMusicPlaying = backgroundMusic && !backgroundMusic.paused;
+        wasAmbientPlaying = ambientSound && !ambientSound.paused;
+
+        // Pause background music (but don't reset currentTime)
+        if (backgroundMusic && !backgroundMusic.paused) {
+          backgroundMusic.pause();
+        }
+
+        // Pause ambient sound (but don't reset currentTime)
+        if (ambientSound && !ambientSound.paused) {
+          ambientSound.pause();
+        }
+
+        // Pause all sound effects in the pool
+        if (audioPool) {
+          Object.keys(audioPool).forEach((key) => {
+            audioPool[key].forEach((audio) => {
+              if (!audio.paused) {
+                audio.pause();
+              }
+            });
+          });
+        }
+      }
+
+      // Resume audio when page becomes visible again (if it was playing before)
+      function resumeAudioOnShow() {
+        // Resume background music if it was playing and music is enabled
+        if (wasMusicPlaying && backgroundMusic && musicEnabled) {
+          backgroundMusic.play().catch((err) => {
+            console.log("Music resume failed:", err);
+          });
+        }
+
+        // Resume ambient sound if it was playing and conditions are met
+        if (
+          wasAmbientPlaying &&
+          ambientSound &&
+          ambientEnabled &&
+          gameActive &&
+          !isPaused &&
+          !isGameOver &&
+          !isJumping
+        ) {
+          ambientSound.play().catch((err) => {
+            console.log("Ambient sound resume failed:", err);
+          });
+        }
+      }
+
+      // Stop all audio completely (for window close)
+      function stopAllAudio() {
+        // Stop background music
+        if (backgroundMusic && !backgroundMusic.paused) {
+          backgroundMusic.pause();
+          backgroundMusic.currentTime = 0; // Reset to beginning
+        }
+
+        // Stop ambient sound
+        stopAmbientSound();
+        if (ambientSound) {
+          ambientSound.currentTime = 0; // Reset to beginning
+        }
+
+        // Stop all sound effects in the pool
+        if (audioPool) {
+          Object.keys(audioPool).forEach((key) => {
+            audioPool[key].forEach((audio) => {
+              if (!audio.paused) {
+                audio.pause();
+                audio.currentTime = 0;
+              }
+            });
+          });
         }
       }
 
@@ -1495,8 +1579,112 @@
       // Reusable objects to prevent memory leaks (created once, reused every frame)
       const _tempEuler = new THREE.Euler(0, 0, 0, "XYZ");
       const _tempVec3 = new THREE.Vector3();
+      const _tempMatrix = new THREE.Matrix4();
+      const _tempPos = new THREE.Vector3();
+      const _tempQuat = new THREE.Quaternion();
+      const _tempScale = new THREE.Vector3();
+      const _tempEulerInst = new THREE.Euler();
 
-      // Object pools for reusing objects instead of creating/destroying them
+      // Instanced rendering helpers
+      function findFirstMesh(root) {
+        let found = null;
+        root.traverse((o) => {
+          if (!found && o.isMesh) found = o;
+        });
+        return found;
+      }
+
+      function createInstancerFromGLB(glbScene, maxCount) {
+        const mesh = findFirstMesh(glbScene);
+        if (!mesh) throw new Error("No mesh found in GLB");
+
+        const inst = new THREE.InstancedMesh(
+          mesh.geometry,
+          mesh.material,
+          maxCount
+        );
+        inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        return inst;
+      }
+
+      // Instanced mesh variables
+      let treeInstances = null;
+      let rockInstances = null;
+      let redSignInstances = null;
+      let blueSignInstances = null;
+      let fenceInstances = null;
+
+      // ID allocation/recycling for instanced objects
+      const freeTreeIds = [];
+      const freeRockIds = [];
+      const freeRedSignIds = [];
+      const freeBlueSignIds = [];
+      const freeFenceIds = [];
+      let nextTreeId = 0;
+      let nextRockId = 0;
+      let nextRedSignId = 0;
+      let nextBlueSignId = 0;
+      let nextFenceId = 0;
+
+      function allocTreeId() {
+        return freeTreeIds.length ? freeTreeIds.pop() : nextTreeId++;
+      }
+      function allocRockId() {
+        return freeRockIds.length ? freeRockIds.pop() : nextRockId++;
+      }
+      function allocRedSignId() {
+        return freeRedSignIds.length ? freeRedSignIds.pop() : nextRedSignId++;
+      }
+      function allocBlueSignId() {
+        return freeBlueSignIds.length
+          ? freeBlueSignIds.pop()
+          : nextBlueSignId++;
+      }
+      function allocFenceId() {
+        return freeFenceIds.length ? freeFenceIds.pop() : nextFenceId++;
+      }
+
+      function setOnSphereInstance(
+        instancedMesh,
+        id,
+        angle,
+        xOffset,
+        scale,
+        yRot,
+        isDecoration = false,
+        yOffset = 0,
+        isTree = false
+      ) {
+        const R = CONFIG.worldRadius;
+        const y = R * Math.cos(angle);
+        const z = R * Math.sin(angle);
+
+        _tempPos.set(xOffset, y, z);
+
+        // Apply vertical offset for playing trees only (not decoration trees, not rocks/signs/fences)
+        if (isTree && !isDecoration && CONFIG.treeVerticalOffset !== 0) {
+          const normalY = Math.cos(angle);
+          const normalZ = Math.sin(angle);
+          _tempPos.y += CONFIG.treeVerticalOffset * normalY;
+          _tempPos.z += CONFIG.treeVerticalOffset * normalZ;
+        }
+
+        // Apply additional Y offset (for signs/fences)
+        if (yOffset !== 0) {
+          _tempPos.y += yOffset;
+        }
+
+        // Match placeOnSphere: rotation.x = angle + random Y rotation
+        _tempEulerInst.set(angle, yRot, 0, "XYZ");
+        _tempQuat.setFromEuler(_tempEulerInst);
+
+        _tempScale.set(scale, scale, scale);
+
+        _tempMatrix.compose(_tempPos, _tempQuat, _tempScale);
+        instancedMesh.setMatrixAt(id, _tempMatrix);
+      }
+
+      // Object pools for reusing objects instead of creating/destroying them (DEPRECATED - using instancing now)
       const treePool = [];
       const rockPool = [];
       const fencePool = [];
@@ -1832,6 +2020,13 @@
         worldSphere.receiveShadow = !isMobile(); // Disable shadow receiving on mobile for performance
         scene.add(worldSphere);
 
+        // Add instancers if they're already loaded
+        if (treeInstances) worldSphere.add(treeInstances);
+        if (rockInstances) worldSphere.add(rockInstances);
+        if (redSignInstances) worldSphere.add(redSignInstances);
+        if (blueSignInstances) worldSphere.add(blueSignInstances);
+        if (fenceInstances) worldSphere.add(fenceInstances);
+
         // Spawn initial trees now that worldSphere is ready
         // (in case tree model loaded before worldSphere was created)
         if (treeModelTemplate) {
@@ -1845,6 +2040,27 @@
         setupSwipeControls();
         setupDebugControls();
         setupSkierControls();
+
+        // Stop audio completely when window/tab is closed
+        window.addEventListener("beforeunload", () => {
+          stopAllAudio();
+        });
+
+        // Pause/resume audio when page visibility changes (for PWA and tab switching)
+        document.addEventListener("visibilitychange", () => {
+          if (document.hidden) {
+            // Page is hidden - pause audio but remember what was playing
+            pauseAudioOnHide();
+          } else {
+            // Page is visible again - resume audio if it was playing before
+            resumeAudioOnShow();
+          }
+        });
+
+        // Stop audio completely when page is being unloaded (for PWA)
+        window.addEventListener("pagehide", () => {
+          stopAllAudio();
+        });
 
         // Initial trees will be spawned after the model loads (in loadTreeModel callback)
         // Don't spawn them here to avoid fallback procedural trees
@@ -2176,6 +2392,23 @@ fov: ${camParams.fov}
         console.log("Skiing pose applied!");
       }
 
+      // Helper function to set bone value only if it changed (optimization)
+      function setBoneZ(boneName, z) {
+        if (!boneParams[boneName]) return false;
+        if (boneParams[boneName].z === z) return false; // skip work if unchanged
+        boneParams[boneName].z = z;
+        updateBoneRotation(boneName);
+        return true;
+      }
+
+      function setBoneY(boneName, y) {
+        if (!boneParams[boneName]) return false;
+        if (boneParams[boneName].y === y) return false; // skip work if unchanged
+        boneParams[boneName].y = y;
+        updateBoneRotation(boneName);
+        return true;
+      }
+
       function updateBoneRotation(boneName) {
         if (skierBones[boneName] && boneParams[boneName]) {
           const bone = skierBones[boneName];
@@ -2187,14 +2420,11 @@ fov: ${camParams.fov}
           // Apply rotation (using quaternion for better bone manipulation)
           bone.quaternion.setFromEuler(_tempEuler);
 
-          // Update skeleton if it exists
-          if (
-            skierModel &&
-            skierModel.children[0] &&
-            skierModel.children[0].skeleton
-          ) {
-            skierModel.children[0].skeleton.update();
-          }
+          // Mark bones as dirty - skeleton will be updated once per frame
+          bonesDirty = true;
+
+          // REMOVED: skeleton.update() - Three.js handles this during rendering
+          // We'll update once per frame if needed in animate()
         }
       }
 
@@ -2468,6 +2698,20 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           (gltf) => {
             treeModelTemplate = gltf.scene;
             optimizeModelForMobile(treeModelTemplate); // Optimize for mobile
+
+            // Create instanced mesh
+            const MAX_TREES = isMobile() ? 200 : 600;
+            treeInstances = createInstancerFromGLB(
+              treeModelTemplate,
+              MAX_TREES
+            );
+            const enableShadows = !isMobile();
+            treeInstances.castShadow = enableShadows;
+            treeInstances.receiveShadow = enableShadows;
+            if (worldSphere) {
+              worldSphere.add(treeInstances);
+            }
+
             console.log("Alpine tree model loaded successfully");
             // Spawn initial trees after model is loaded (only if worldSphere is ready)
             if (worldSphere) {
@@ -2501,6 +2745,20 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           (gltf) => {
             rockModelTemplate = gltf.scene;
             optimizeModelForMobile(rockModelTemplate); // Optimize for mobile
+
+            // Create instanced mesh
+            const MAX_ROCKS = isMobile() ? 100 : 300;
+            rockInstances = createInstancerFromGLB(
+              rockModelTemplate,
+              MAX_ROCKS
+            );
+            const enableShadows = !isMobile();
+            rockInstances.castShadow = enableShadows;
+            rockInstances.receiveShadow = enableShadows;
+            if (worldSphere) {
+              worldSphere.add(rockInstances);
+            }
+
             console.log("Rock model loaded successfully");
             assetLoadingState.rock = true;
             updateLoadingProgress();
@@ -2530,6 +2788,20 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           (gltf) => {
             redSignModelTemplate = gltf.scene;
             optimizeModelForMobile(redSignModelTemplate); // Optimize for mobile
+
+            // Create instanced mesh
+            const MAX_SIGNS = isMobile() ? 50 : 150;
+            redSignInstances = createInstancerFromGLB(
+              redSignModelTemplate,
+              MAX_SIGNS
+            );
+            const enableShadows = !isMobile();
+            redSignInstances.castShadow = enableShadows;
+            redSignInstances.receiveShadow = enableShadows;
+            if (worldSphere) {
+              worldSphere.add(redSignInstances);
+            }
+
             console.log("Red sign model loaded successfully");
             assetLoadingState.redSign = true;
             updateLoadingProgress();
@@ -2557,6 +2829,20 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           (gltf) => {
             blueSignModelTemplate = gltf.scene;
             optimizeModelForMobile(blueSignModelTemplate); // Optimize for mobile
+
+            // Create instanced mesh
+            const MAX_SIGNS = isMobile() ? 50 : 150;
+            blueSignInstances = createInstancerFromGLB(
+              blueSignModelTemplate,
+              MAX_SIGNS
+            );
+            const enableShadows = !isMobile();
+            blueSignInstances.castShadow = enableShadows;
+            blueSignInstances.receiveShadow = enableShadows;
+            if (worldSphere) {
+              worldSphere.add(blueSignInstances);
+            }
+
             console.log("Blue sign model loaded successfully");
             assetLoadingState.blueSign = true;
             updateLoadingProgress();
@@ -2586,6 +2872,20 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           (gltf) => {
             fenceModelTemplate = gltf.scene;
             optimizeModelForMobile(fenceModelTemplate); // Optimize for mobile
+
+            // Create instanced mesh
+            const MAX_FENCES = isMobile() ? 50 : 150;
+            fenceInstances = createInstancerFromGLB(
+              fenceModelTemplate,
+              MAX_FENCES
+            );
+            const enableShadows = !isMobile();
+            fenceInstances.castShadow = enableShadows;
+            fenceInstances.receiveShadow = enableShadows;
+            if (worldSphere) {
+              worldSphere.add(fenceInstances);
+            }
+
             console.log("Wooden fence model loaded successfully");
             assetLoadingState.fence = true;
             updateLoadingProgress();
@@ -2691,14 +2991,10 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function spawnTree(angle, isDecoration = false, laneIndex = 0) {
-        const tree = createTree(isDecoration, true);
+        if (!treeInstances) return;
 
-        // Skip if model not loaded yet
-        if (!tree) return;
-
-        // Reset tree properties (important when reusing from pool)
-        // Scale and rotation will be set below, but ensure it's visible
-        tree.visible = true;
+        const id = allocTreeId();
+        if (id >= treeInstances.count) return; // out of capacity
 
         let xPos;
         if (isDecoration) {
@@ -2709,22 +3005,29 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           xPos = lane * CONFIG.laneWidth;
         }
 
-        placeOnSphere(tree, angle, xPos);
+        const baseScale = isDecoration ? 2.5 : 4.0;
+        const scaleVariation = 0.8 + Math.random() * 0.5;
+        const scale = baseScale * scaleVariation;
+        const yRot = Math.random() * Math.PI * 2;
 
-        // Apply vertical offset for playing trees only (not decoration trees)
-        // Offset is applied along the sphere's surface normal (not world Y)
-        // Adjust CONFIG.treeVerticalOffset to control height
-        if (!isDecoration && CONFIG.treeVerticalOffset !== 0) {
-          // Calculate sphere surface normal at this angle
-          const R = CONFIG.worldRadius;
-          const normalY = Math.cos(angle);
-          const normalZ = Math.sin(angle);
-          // Move along the normal by the offset amount
-          tree.position.y += CONFIG.treeVerticalOffset * normalY;
-          tree.position.z += CONFIG.treeVerticalOffset * normalZ;
-        }
+        setOnSphereInstance(
+          treeInstances,
+          id,
+          angle,
+          xPos,
+          scale,
+          yRot,
+          isDecoration,
+          0,
+          true // isTree = true
+        );
 
-        activeObstacles.push({ mesh: tree, angle: angle });
+        activeObstacles.push({
+          kind: "tree",
+          id,
+          angle,
+          lane: isDecoration ? null : laneIndex - 1,
+        });
       }
 
       function createRock(reuseFromPool = true) {
@@ -2771,16 +3074,28 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function spawnBarrier(angle, laneIndex) {
-        const rock = createRock(true);
+        if (!rockInstances) return;
 
-        // Skip if model not loaded yet
-        if (!rock) return;
+        const id = allocRockId();
+        if (id >= rockInstances.count) return; // out of capacity
 
         const lane = laneIndex - 1;
         const xPos = lane * CONFIG.laneWidth;
 
-        placeOnSphere(rock, angle, xPos);
-        activeBarriers.push({ mesh: rock, angle: angle, passed: false });
+        const baseScale = 2.0;
+        const scaleVariation = 0.6 + Math.random() * 0.4;
+        const scale = baseScale * scaleVariation;
+        const yRot = Math.random() * Math.PI * 2;
+
+        setOnSphereInstance(rockInstances, id, angle, xPos, scale, yRot);
+
+        activeBarriers.push({
+          kind: "rock",
+          id,
+          angle,
+          lane: laneIndex - 1,
+          passed: false,
+        });
       }
 
       // --- NEW: BOUNDARY DECORATIONS (Flags/Fences) ---
@@ -2801,29 +3116,117 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         boundaryAlternator++;
         const isFence = boundaryAlternator % 4 === 0;
 
-        const leftObj = createBoundaryObject(isFence, true);
-        placeOnSphere(leftObj, angle, -9);
-        // Adjust fence Y position (can be modified here)
         if (isFence) {
-          leftObj.position.y += 0; // Adjust this value to raise/lower the fence
-        }
-        activeBoundaries.push({
-          mesh: leftObj,
-          angle: angle,
-          type: isFence ? "fence" : "sign",
-        });
+          // Spawn fence on left
+          if (fenceInstances) {
+            const leftId = allocFenceId();
+            if (leftId < fenceInstances.count) {
+              const scale = 3.25;
+              const yRot = 0;
+              setOnSphereInstance(
+                fenceInstances,
+                leftId,
+                angle,
+                -9,
+                scale,
+                yRot
+              );
+              activeBoundaries.push({
+                kind: "fence",
+                id: leftId,
+                instancer: fenceInstances,
+                angle: angle,
+                type: "fence",
+              });
+            }
+          }
 
-        const rightObj = createBoundaryObject(isFence, false);
-        placeOnSphere(rightObj, angle, 9);
-        // Adjust fence Y position (can be modified here)
-        if (isFence) {
-          rightObj.position.y += 0; // Adjust this value to raise/lower the fence
+          // Spawn fence on right
+          if (fenceInstances) {
+            const rightId = allocFenceId();
+            if (rightId < fenceInstances.count) {
+              const scale = 3.25;
+              const yRot = 0;
+              setOnSphereInstance(
+                fenceInstances,
+                rightId,
+                angle,
+                9,
+                scale,
+                yRot
+              );
+              activeBoundaries.push({
+                kind: "fence",
+                id: rightId,
+                instancer: fenceInstances,
+                angle: angle,
+                type: "fence",
+              });
+            }
+          }
+        } else {
+          // Spawn sign on left (randomly choose red or blue)
+          const useRedLeft = Math.random() > 0.5;
+          const leftInstancer = useRedLeft
+            ? redSignInstances
+            : blueSignInstances;
+          if (leftInstancer) {
+            const leftId = useRedLeft ? allocRedSignId() : allocBlueSignId();
+            if (leftId < leftInstancer.count) {
+              const scale = 1.5;
+              const yRot = (Math.random() - 0.5) * 0.4;
+              setOnSphereInstance(
+                leftInstancer,
+                leftId,
+                angle,
+                -9,
+                scale,
+                yRot,
+                false,
+                0.5
+              );
+              activeBoundaries.push({
+                kind: "sign",
+                id: leftId,
+                instancer: leftInstancer,
+                angle: angle,
+                type: "sign",
+                signType: useRedLeft ? "red" : "blue",
+              });
+            }
+          }
+
+          // Spawn sign on right (randomly choose red or blue)
+          const useRedRight = Math.random() > 0.5;
+          const rightInstancer = useRedRight
+            ? redSignInstances
+            : blueSignInstances;
+          if (rightInstancer) {
+            const rightId = useRedRight ? allocRedSignId() : allocBlueSignId();
+            if (rightId < rightInstancer.count) {
+              const scale = 1.5;
+              const yRot = (Math.random() - 0.5) * 0.4;
+              setOnSphereInstance(
+                rightInstancer,
+                rightId,
+                angle,
+                9,
+                scale,
+                yRot,
+                false,
+                0.5
+              );
+              activeBoundaries.push({
+                kind: "sign",
+                id: rightId,
+                instancer: rightInstancer,
+                angle: angle,
+                type: "sign",
+                signType: useRedRight ? "red" : "blue",
+              });
+            }
+          }
         }
-        activeBoundaries.push({
-          mesh: rightObj,
-          angle: angle,
-          type: isFence ? "fence" : "sign",
-        });
       }
 
       function createSign() {
@@ -2964,6 +3367,10 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         if (shouldSpawnDecorationTree) {
           spawnTree(angle, true);
         }
+
+        // Update instance matrices after batch spawn
+        if (treeInstances) treeInstances.instanceMatrix.needsUpdate = true;
+        if (rockInstances) rockInstances.instanceMatrix.needsUpdate = true;
       }
 
       function createGift() {
@@ -3003,12 +3410,11 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
 
         // Check obstacles at this angle
         activeObstacles.forEach((obj) => {
-          obj.mesh.getWorldPosition(_tempVec3); // Reuse vector
           // Check if obstacle is near this angle
           const angleDiff = Math.abs(obj.angle - angle);
-          if (angleDiff < 0.1) {
-            // Determine which lane this obstacle is in
-            const lane = Math.round(_tempVec3.x / CONFIG.laneWidth);
+          if (angleDiff < 0.1 && obj.lane !== null && obj.lane !== undefined) {
+            // Use stored lane instead of getWorldPosition
+            const lane = Math.round(obj.lane);
             if (lane >= -1 && lane <= 1) {
               occupiedLanes.add(lane);
             }
@@ -3017,10 +3423,10 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
 
         // Check barriers at this angle
         activeBarriers.forEach((obj) => {
-          obj.mesh.getWorldPosition(_tempVec3); // Reuse vector
           const angleDiff = Math.abs(obj.angle - angle);
-          if (angleDiff < 0.1) {
-            const lane = Math.round(_tempVec3.x / CONFIG.laneWidth);
+          if (angleDiff < 0.1 && obj.lane !== null && obj.lane !== undefined) {
+            // Use stored lane instead of getWorldPosition
+            const lane = Math.round(obj.lane);
             if (lane >= -1 && lane <= 1) {
               occupiedLanes.add(lane);
             }
@@ -3179,6 +3585,19 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           player.rotation.z += 0.08;
         }
 
+        // Update skeleton once per frame if bones were modified (batched update)
+        if (
+          bonesDirty &&
+          skierModel &&
+          skierModel.children[0] &&
+          skierModel.children[0].skeleton
+        ) {
+          // Often you can omit this entirely and Three.js will handle it during rendering
+          // But keeping it for explicit control - only called ONCE per frame
+          skierModel.children[0].skeleton.update();
+          bonesDirty = false;
+        }
+
         renderer.render(scene, camera);
       }
 
@@ -3203,6 +3622,9 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
             isJumping = false;
             verticalVelocity = 0;
 
+            // Bones will be reset in updateJumpAnimation when it detects jump end
+            // (wasJumping will be true, isJumping will be false)
+
             // Resume ambient sound when jump ends
             startAmbientSound();
           }
@@ -3217,8 +3639,9 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         // Get total rotation from world sphere (already updated in animate loop)
         const totalRotation = -worldSphere.rotation.x;
 
-        // Only update score if game is active
-        if (gameActive) {
+        // Only update score if game is active AND not game over
+        // This prevents score accumulation during game over or restart
+        if (gameActive && !isGameOver && !isPaused) {
           score += currentRotationSpeed * 100;
           document.getElementById("score").innerText = Math.floor(score);
         }
@@ -3302,55 +3725,73 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           if (cleanupCounter % 3 !== 0) return; // Skip cleanup 2 out of 3 frames on mobile
         }
 
-        // FIXED CLEANUP: Only remove when they go over horizon (Z < -60)
-        const cleanupList = [activeObstacles, activeBarriers, activeBoundaries];
+        const currentWorldAngle = -worldSphere.rotation.x;
+        let needsMatrixUpdate = false;
 
-        // Object pooling: Instead of removing objects, hide them and add to pool
-        cleanupList.forEach((list, listIndex) => {
-          for (let i = list.length - 1; i >= 0; i--) {
-            const obj = list[i];
-            // Use angle-based check instead of getWorldPosition (faster!)
-            // Objects behind player have angle < currentWorldAngle - threshold
-            const currentWorldAngle = -worldSphere.rotation.x;
-            const angleDiff = currentWorldAngle - obj.angle;
-
-            // If object is more than 1.5 radians behind player, pool it
-            if (angleDiff > 1.5) {
-              // Hide object and add to appropriate pool
-              obj.mesh.visible = false;
-
-              // Determine which pool to use based on list type
-              if (listIndex === 0) {
-                // activeObstacles (trees)
-                treePool.push(obj.mesh);
-              } else if (listIndex === 1) {
-                // activeBarriers (rocks)
-                rockPool.push(obj.mesh);
-              } else if (listIndex === 2) {
-                // activeBoundaries (fences/signs)
-                // Store type in the object if available, otherwise guess from mesh
-                if (obj.type === "fence") {
-                  fencePool.push(obj.mesh);
-                } else if (obj.type === "sign") {
-                  signPool.push(obj.mesh);
-                } else {
-                  // Fallback: guess from mesh structure
-                  if (obj.mesh.children && obj.mesh.children.length > 0) {
-                    fencePool.push(obj.mesh);
-                  } else {
-                    signPool.push(obj.mesh);
-                  }
-                }
-              }
-
-              list.splice(i, 1);
+        // Cleanup obstacles (trees)
+        for (let i = activeObstacles.length - 1; i >= 0; i--) {
+          const obj = activeObstacles[i];
+          const angleDiff = currentWorldAngle - obj.angle;
+          if (angleDiff > 1.5) {
+            // Hide instance by scaling to near-zero
+            if (treeInstances && obj.id !== undefined) {
+              setOnSphereInstance(treeInstances, obj.id, 0, 0, 0.0001, 0);
+              freeTreeIds.push(obj.id);
+              needsMatrixUpdate = true;
             }
+            activeObstacles.splice(i, 1);
           }
-        });
+        }
+
+        // Cleanup barriers (rocks)
+        for (let i = activeBarriers.length - 1; i >= 0; i--) {
+          const obj = activeBarriers[i];
+          const angleDiff = currentWorldAngle - obj.angle;
+          if (angleDiff > 1.5) {
+            // Hide instance by scaling to near-zero
+            if (rockInstances && obj.id !== undefined) {
+              setOnSphereInstance(rockInstances, obj.id, 0, 0, 0.0001, 0);
+              freeRockIds.push(obj.id);
+              needsMatrixUpdate = true;
+            }
+            activeBarriers.splice(i, 1);
+          }
+        }
+
+        // Cleanup boundaries (fences/signs)
+        for (let i = activeBoundaries.length - 1; i >= 0; i--) {
+          const obj = activeBoundaries[i];
+          const angleDiff = currentWorldAngle - obj.angle;
+          if (angleDiff > 1.5) {
+            // Hide instance by scaling to near-zero
+            if (obj.instancer && obj.id !== undefined) {
+              setOnSphereInstance(obj.instancer, obj.id, 0, 0, 0.0001, 0);
+              if (obj.type === "fence") {
+                freeFenceIds.push(obj.id);
+              } else if (obj.signType === "red") {
+                freeRedSignIds.push(obj.id);
+              } else if (obj.signType === "blue") {
+                freeBlueSignIds.push(obj.id);
+              }
+              needsMatrixUpdate = true;
+            }
+            activeBoundaries.splice(i, 1);
+          }
+        }
+
+        // Update instance matrices once after batch cleanup
+        if (needsMatrixUpdate) {
+          if (treeInstances) treeInstances.instanceMatrix.needsUpdate = true;
+          if (rockInstances) rockInstances.instanceMatrix.needsUpdate = true;
+          if (fenceInstances) fenceInstances.instanceMatrix.needsUpdate = true;
+          if (redSignInstances)
+            redSignInstances.instanceMatrix.needsUpdate = true;
+          if (blueSignInstances)
+            blueSignInstances.instanceMatrix.needsUpdate = true;
+        }
 
         // Cleanup gift if it goes over horizon (angle-based check)
         if (activeGift) {
-          const currentWorldAngle = -worldSphere.rotation.x;
           const angleDiff = currentWorldAngle - activeGift.angle;
           if (angleDiff > 1.5) {
             activeGift.mesh.visible = false;
@@ -3363,15 +3804,19 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           // Remove oldest obstacles if over limit
           while (activeObstacles.length > MAX_ACTIVE_OBSTACLES) {
             const obj = activeObstacles.shift();
-            if (obj && obj.mesh && obj.mesh.parent) {
-              obj.mesh.parent.remove(obj.mesh);
+            if (obj && treeInstances && obj.id !== undefined) {
+              setOnSphereInstance(treeInstances, obj.id, 0, 0, 0.0001, 0);
+              freeTreeIds.push(obj.id);
+              treeInstances.instanceMatrix.needsUpdate = true;
             }
           }
           // Remove oldest barriers if over limit
           while (activeBarriers.length > MAX_ACTIVE_BARRIERS) {
             const obj = activeBarriers.shift();
-            if (obj && obj.mesh && obj.mesh.parent) {
-              obj.mesh.parent.remove(obj.mesh);
+            if (obj && rockInstances && obj.id !== undefined) {
+              setOnSphereInstance(rockInstances, obj.id, 0, 0, 0.0001, 0);
+              freeRockIds.push(obj.id);
+              rockInstances.instanceMatrix.needsUpdate = true;
             }
           }
         }
@@ -3439,12 +3884,16 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           // Early exit if tree is too far ahead (angle difference > ~0.08 radians ≈ 4.6 degrees)
           if (angleDiff > 0.08) continue; // Skip if too far ahead
 
+          // Skip decoration trees (they don't have lanes and shouldn't cause collisions)
+          if (obj.lane === null || obj.lane === undefined) continue;
+
           // Only check X position if tree is clearly ahead and very close (within 0.03 radians ≈ 1.7 degrees)
           // Very tight window to ensure tree is clearly ahead and prevent backward collisions
           // The tree's collision point might be slightly behind its angle, so we need a buffer
           if (angleDiff > 0.02 && angleDiff < 0.03) {
-            obj.mesh.getWorldPosition(_tempVec3);
-            if (Math.abs(_tempVec3.x - pX) < 1.5) {
+            // Calculate X position from lane (instanced objects don't have mesh.getWorldPosition)
+            const treeX = obj.lane * CONFIG.laneWidth;
+            if (Math.abs(treeX - pX) < 1.5) {
               triggerCrash();
               break; // Stop checking after collision
             }
@@ -3473,11 +3922,15 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           // Early exit if barrier is too far ahead (angle difference > ~0.1 radians ≈ 5.7 degrees)
           if (angleDiff > 0.1) continue; // Skip if too far ahead
 
+          // Skip if lane is invalid (shouldn't happen for rocks, but safety check)
+          if (obj.lane === null || obj.lane === undefined) continue;
+
           // Only check X position when barrier is very close (within 0.03 radians ≈ 1.7 degrees)
           // This gives player more time to jump before collision check
           if (!obj.passed && angleDiff >= -0.02 && angleDiff < 0.03) {
-            obj.mesh.getWorldPosition(_tempVec3);
-            if (Math.abs(_tempVec3.x - pX) < 2.0) {
+            // Calculate X position from lane (instanced objects don't have mesh.getWorldPosition)
+            const rockX = obj.lane * CONFIG.laneWidth;
+            if (Math.abs(rockX - pX) < 2.0) {
               // Easier to jump over: > 1.0 height required
               if (playerHeight > 1.0) {
                 obj.passed = true;
@@ -3594,12 +4047,14 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function restartGame() {
+        // CRITICAL: Set gameActive to false FIRST to prevent score accumulation during reset
+        gameActive = false;
+        isGameOver = false;
+        isPaused = false;
+
         // Reset game state
         lives = 3;
         score = 0;
-        isGameOver = false;
-        gameActive = true;
-        isPaused = false;
         skierRollAwayRotation = 0;
 
         // Reset pause button
@@ -3624,6 +4079,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
 
         // Reset jump state
         isJumping = false;
+        wasJumping = false; // Reset jump tracking
         verticalVelocity = 0;
         playerHeight = 0;
 
@@ -3647,7 +4103,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         currentLane = 0;
         targetX = 0;
 
-        // Reset world rotation and speed
+        // Reset world rotation and speed BEFORE setting gameActive to true
         worldSphere.rotation.x = 0;
         currentRotationSpeed = CONFIG.baseSpeed;
         lastSpawnRotation = 0;
@@ -3660,27 +4116,45 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         rightTurnTime = 0;
         leftTurnTime = 0;
 
-        // Clear obstacles - remove from worldSphere (they're children of worldSphere)
+        // Clear obstacles - recycle IDs for instanced objects
         activeObstacles.forEach((obj) => {
-          if (obj.mesh && obj.mesh.parent) {
-            obj.mesh.parent.remove(obj.mesh);
+          if (obj.id !== undefined && treeInstances) {
+            setOnSphereInstance(treeInstances, obj.id, 0, 0, 0.0001, 0);
+            freeTreeIds.push(obj.id);
           }
         });
         activeObstacles = [];
 
         activeBarriers.forEach((obj) => {
-          if (obj.mesh && obj.mesh.parent) {
-            obj.mesh.parent.remove(obj.mesh);
+          if (obj.id !== undefined && rockInstances) {
+            setOnSphereInstance(rockInstances, obj.id, 0, 0, 0.0001, 0);
+            freeRockIds.push(obj.id);
           }
         });
         activeBarriers = [];
 
         activeBoundaries.forEach((obj) => {
-          if (obj.mesh && obj.mesh.parent) {
-            obj.mesh.parent.remove(obj.mesh);
+          if (obj.id !== undefined && obj.instancer) {
+            setOnSphereInstance(obj.instancer, obj.id, 0, 0, 0.0001, 0);
+            if (obj.type === "fence") {
+              freeFenceIds.push(obj.id);
+            } else if (obj.signType === "red") {
+              freeRedSignIds.push(obj.id);
+            } else if (obj.signType === "blue") {
+              freeBlueSignIds.push(obj.id);
+            }
           }
         });
         activeBoundaries = [];
+
+        // Update instance matrices
+        if (treeInstances) treeInstances.instanceMatrix.needsUpdate = true;
+        if (rockInstances) rockInstances.instanceMatrix.needsUpdate = true;
+        if (fenceInstances) fenceInstances.instanceMatrix.needsUpdate = true;
+        if (redSignInstances)
+          redSignInstances.instanceMatrix.needsUpdate = true;
+        if (blueSignInstances)
+          blueSignInstances.instanceMatrix.needsUpdate = true;
 
         // Reset score display
         document.getElementById("score").innerText = "0";
@@ -3711,6 +4185,10 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
 
         // Spawn initial trees and boundaries for new game
         spawnInitialTrees();
+
+        // FINALLY: Set gameActive to true AFTER everything is reset
+        // This prevents score accumulation during the reset process
+        gameActive = true;
       }
 
       function startCrashAnimation() {
@@ -3932,9 +4410,31 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function resetGame() {
-        activeObstacles.forEach((o) => worldSphere.remove(o.mesh));
-        activeBarriers.forEach((o) => worldSphere.remove(o.mesh));
-        activeBoundaries.forEach((o) => worldSphere.remove(o.mesh));
+        // Recycle IDs for instanced objects
+        activeObstacles.forEach((obj) => {
+          if (obj.id !== undefined && treeInstances) {
+            setOnSphereInstance(treeInstances, obj.id, 0, 0, 0.0001, 0);
+            freeTreeIds.push(obj.id);
+          }
+        });
+        activeBarriers.forEach((obj) => {
+          if (obj.id !== undefined && rockInstances) {
+            setOnSphereInstance(rockInstances, obj.id, 0, 0, 0.0001, 0);
+            freeRockIds.push(obj.id);
+          }
+        });
+        activeBoundaries.forEach((obj) => {
+          if (obj.id !== undefined && obj.instancer) {
+            setOnSphereInstance(obj.instancer, obj.id, 0, 0, 0.0001, 0);
+            if (obj.type === "fence") {
+              freeFenceIds.push(obj.id);
+            } else if (obj.signType === "red") {
+              freeRedSignIds.push(obj.id);
+            } else if (obj.signType === "blue") {
+              freeBlueSignIds.push(obj.id);
+            }
+          }
+        });
         if (activeGift) {
           worldSphere.remove(activeGift.mesh);
         }
@@ -3943,6 +4443,15 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         activeBoundaries = [];
         activeGift = null;
         giftCollected = false;
+
+        // Update instance matrices
+        if (treeInstances) treeInstances.instanceMatrix.needsUpdate = true;
+        if (rockInstances) rockInstances.instanceMatrix.needsUpdate = true;
+        if (fenceInstances) fenceInstances.instanceMatrix.needsUpdate = true;
+        if (redSignInstances)
+          redSignInstances.instanceMatrix.needsUpdate = true;
+        if (blueSignInstances)
+          blueSignInstances.instanceMatrix.needsUpdate = true;
         lastGiftSpawnDistance = 0;
 
         player.position.x = 0;
@@ -4113,26 +4622,25 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function updateJumpAnimation(deltaTime) {
-        if (!isJumping) {
-          // Reset to base when not jumping
-          if (boneParams.L_Upperarm && lUpperarmBaseZ !== 0) {
-            boneParams.L_Upperarm.z = lUpperarmBaseZ;
-            updateBoneRotation("L_Upperarm");
-          }
-          if (boneParams.R_Upperarm && rUpperarmBaseZ !== 0) {
-            boneParams.R_Upperarm.z = rUpperarmBaseZ;
-            updateBoneRotation("R_Upperarm");
-          }
-          if (boneParams.L_Thigh && lThighBaseY !== 0) {
-            boneParams.L_Thigh.y = lThighBaseY;
-            updateBoneRotation("L_Thigh");
-          }
-          if (boneParams.R_Thigh && rThighBaseY !== 0) {
-            boneParams.R_Thigh.y = rThighBaseY;
-            updateBoneRotation("R_Thigh");
-          }
+        // Only reset bones once when jump ends (not every frame)
+        if (!isJumping && wasJumping) {
+          // Jump just ended - reset bones to base values once
+          setBoneZ("L_Upperarm", lUpperarmBaseZ);
+          setBoneZ("R_Upperarm", rUpperarmBaseZ);
+          setBoneY("L_Thigh", lThighBaseY);
+          setBoneY("R_Thigh", rThighBaseY);
+          wasJumping = false;
           return;
         }
+
+        // If not jumping and wasn't jumping before, do nothing
+        if (!isJumping) {
+          wasJumping = false;
+          return;
+        }
+
+        // Track that we're jumping
+        wasJumping = true;
 
         jumpAnimationTime += deltaTime * jumpAnimationSpeed;
         const jumpUpDuration = 0.3; // Time to go from base to jump position
