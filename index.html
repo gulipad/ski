@@ -1135,20 +1135,192 @@
       let musicEnabled = true;
       let ambientEnabled = true;
       let sfxEnabled = true;
-      let backgroundMusic = null;
-      let ambientSound = null;
-      let ambientSoundBaseVolume = 0.6; // Store base volume for restoration
-      let wasMusicPlaying = false; // Track if music was playing before page was hidden
-      let wasAmbientPlaying = false; // Track if ambient was playing before page was hidden
-      let soundEffects = {
-        jump: null,
-        crash: null,
-        leftTurn: null,
-        rightTurn: null,
-        ouch3: null,
-        thump: null,
-        ohNo: null,
+
+      // ---------- AUDIO MANAGER (WebAudio SFX + HTMLAudio loops) ----------
+      class AudioManager {
+        constructor({ soundManifest, volumes }) {
+          this.soundManifest = soundManifest; // key -> url
+          this.volumes = volumes; // key -> 0..1
+
+          this.ctx = null;
+          this.buffers = new Map();
+
+          this.musicEnabled = true;
+          this.ambientEnabled = true;
+          this.sfxEnabled = true;
+
+          // loops as HTMLAudio (streaming)
+          this.music = new Audio("/assets/audio/music.mp3");
+          this.music.loop = true;
+          this.music.preload = "auto";
+          this.music.playsInline = true;
+          this.music.volume = 0.5;
+
+          this.ambient = new Audio("/assets/audio/snow-sliding.mp3");
+          this.ambient.loop = true;
+          this.ambient.preload = "auto";
+          this.ambient.playsInline = true;
+          this.ambient.volume = 0.6;
+
+          this.unlocked = false;
+        }
+
+        async unlock() {
+          if (this.unlocked) return;
+
+          // Create AudioContext on gesture
+          this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+          if (this.ctx.state === "suspended") {
+            await this.ctx.resume().catch(() => {});
+          }
+
+          // Load/decode SFX buffers
+          await this._loadAllSfx();
+
+          // Prime loops so iOS "authorizes" them
+          await this._primeHtmlAudio(this.music);
+          await this._primeHtmlAudio(this.ambient);
+
+          this.unlocked = true;
+
+          // Start loops if enabled
+          this.ensureMusic();
+          this.ensureAmbient({
+            gameActive: true,
+            isPaused: false,
+            isGameOver: false,
+            isJumping: false,
+          });
+        }
+
+        async _loadAllSfx() {
+          const entries = Object.entries(this.soundManifest);
+
+          // Only load SFX here (exclude music/ambient if present in manifest)
+          const sfxEntries = entries.filter(
+            ([key]) => key !== "music" && key !== "ambient"
+          );
+
+          await Promise.all(
+            sfxEntries.map(async ([key, url]) => {
+              try {
+                const res = await fetch(url);
+                const arr = await res.arrayBuffer();
+                const buf = await this.ctx.decodeAudioData(arr);
+                this.buffers.set(key, buf);
+              } catch (e) {
+                console.warn("Failed to load SFX", key, url, e);
+              }
+            })
+          );
+        }
+
+        async _primeHtmlAudio(a) {
+          try {
+            a.muted = true;
+            await a.play();
+            a.pause();
+            a.currentTime = 0;
+            a.muted = false;
+          } catch {
+            // okay if it fails on some devices; unlock gesture usually helps
+          }
+        }
+
+        setToggles({ musicEnabled, ambientEnabled, sfxEnabled }) {
+          if (typeof musicEnabled === "boolean")
+            this.musicEnabled = musicEnabled;
+          if (typeof ambientEnabled === "boolean")
+            this.ambientEnabled = ambientEnabled;
+          if (typeof sfxEnabled === "boolean") this.sfxEnabled = sfxEnabled;
+
+          // Apply immediately
+          this.ensureMusic();
+          // ambient depends on game state; call ensureAmbient from your game loop/state transitions
+        }
+
+        // ---- SFX (WebAudio) ----
+        playSfx(key) {
+          if (!this.unlocked || !this.ctx || !this.sfxEnabled) return;
+
+          const buf = this.buffers.get(key);
+          if (!buf) return;
+
+          const src = this.ctx.createBufferSource();
+          src.buffer = buf;
+
+          const gain = this.ctx.createGain();
+          gain.gain.value = this.volumes[key] ?? 0.7;
+
+          src.connect(gain);
+          gain.connect(this.ctx.destination);
+
+          src.start(0);
+        }
+
+        // ---- Loops (HTMLAudio) ----
+        ensureMusic() {
+          if (!this.unlocked) return;
+          if (!this.musicEnabled) {
+            if (!this.music.paused) this.music.pause();
+            return;
+          }
+          if (this.music.paused) this.music.play().catch(() => {});
+        }
+
+        ensureAmbient({ gameActive, isPaused, isGameOver, isJumping }) {
+          if (!this.unlocked) return;
+
+          const shouldPlay =
+            this.ambientEnabled &&
+            gameActive &&
+            !isPaused &&
+            !isGameOver &&
+            !isJumping;
+
+          if (shouldPlay) {
+            if (this.ambient.paused) this.ambient.play().catch(() => {});
+          } else {
+            if (!this.ambient.paused) this.ambient.pause();
+          }
+        }
+
+        stopAll() {
+          if (!this.music.paused) this.music.pause();
+          if (!this.ambient.paused) this.ambient.pause();
+        }
+      }
+      // ---------- end AUDIO MANAGER ----------
+
+      // SFX volumes map
+      const SFX_VOLUMES = {
+        jump: 0.6,
+        crash: 0.7,
+        leftTurn: 0.4,
+        rightTurn: 0.4,
+        ouch3: 0.7,
+        thump: 0.6,
+        ohNo: 0.7,
+        twinkle: 0.8,
       };
+
+      // Register sounds to load (SFX only - music/ambient handled separately)
+      const soundManifest = {
+        jump: "/assets/audio/jump.mp3",
+        crash: "/assets/audio/crash.mp3",
+        leftTurn: "/assets/audio/turn.mp3",
+        rightTurn: "/assets/audio/turn.mp3", // Same file
+        ouch3: "/assets/audio/ouch_3.mp3",
+        thump: "/assets/audio/thump.mp3",
+        ohNo: "/assets/audio/oh_no.mp3",
+        twinkle: "/assets/audio/twinkle.mp3",
+      };
+
+      // Create audio manager instance
+      const audio = new AudioManager({
+        soundManifest,
+        volumes: SFX_VOLUMES,
+      });
 
       // Cookie helper functions
       function setCookie(name, value, days = 365) {
@@ -1189,6 +1361,9 @@
         document.getElementById("music-toggle").checked = musicEnabled;
         document.getElementById("ambient-toggle").checked = ambientEnabled;
         document.getElementById("sfx-toggle").checked = sfxEnabled;
+
+        // Apply settings to AudioManager
+        audio.setToggles({ musicEnabled, ambientEnabled, sfxEnabled });
       }
 
       // Save audio settings to cookies
@@ -1198,215 +1373,7 @@
         setCookie("sfxEnabled", sfxEnabled);
       }
 
-      // Audio Pooling Configuration
-      const SOUND_POOL_SIZE = 5; // How many copies of EACH sound to keep ready
-
-      // Global Sound Pool
-      const audioPool = {};
-
-      // Register sounds to load
-      const soundManifest = {
-        jump: "/assets/audio/jump.mp3",
-        crash: "/assets/audio/crash.mp3",
-        leftTurn: "/assets/audio/turn.mp3",
-        rightTurn: "/assets/audio/turn.mp3", // Same file
-        ouch3: "/assets/audio/ouch_3.mp3",
-        thump: "/assets/audio/thump.mp3",
-        ohNo: "/assets/audio/oh_no.mp3",
-        twinkle: "/assets/audio/twinkle.mp3",
-      };
-
-      // Helper to maintain your specific volumes
-      function getVolumeForKey(key) {
-        const volumes = {
-          jump: 0.6,
-          crash: 0.7,
-          leftTurn: 0.4,
-          rightTurn: 0.4,
-          ouch3: 0.7,
-          thump: 0.6,
-          ohNo: 0.7,
-          twinkle: 0.8,
-        };
-        return volumes[key] || 0.5;
-      }
-
-      // Initialize audio with pooling system
-      function initAudio() {
-        if (audioInitialized) return; // Prevent double initialization
-
-        // 1. Initialize Music & Ambient (Keep as single instances)
-        backgroundMusic = new Audio("/assets/audio/music.mp3");
-        backgroundMusic.loop = true;
-        backgroundMusic.volume = 0.5;
-        backgroundMusic.preload = "auto";
-
-        ambientSound = new Audio("/assets/audio/snow-sliding.mp3");
-        ambientSound.loop = true;
-        ambientSound.volume = ambientSoundBaseVolume;
-        ambientSound.preload = "auto";
-
-        // 2. Initialize the Sound Pool
-        // We pre-load multiple copies of every sound effect so they are waiting in memory.
-        for (const [key, src] of Object.entries(soundManifest)) {
-          audioPool[key] = [];
-          for (let i = 0; i < SOUND_POOL_SIZE; i++) {
-            const audio = new Audio(src);
-            audio.volume = getVolumeForKey(key); // Helper to set volume
-
-            // CRITICAL FOR MOBILE: Force the browser to buffer the metadata
-            audio.load();
-
-            audioPool[key].push(audio);
-          }
-        }
-
-        // Start music if enabled
-        startMusic();
-
-        audioInitialized = true;
-      }
-
-      // Start music
-      function startMusic() {
-        if (backgroundMusic && musicEnabled) {
-          backgroundMusic.play().catch((err) => {
-            console.log("Music play failed:", err);
-          });
-        }
-      }
-
-      // Start ambient sound
-      function startAmbientSound() {
-        if (
-          ambientSound &&
-          ambientEnabled &&
-          gameActive &&
-          !isPaused &&
-          !isGameOver &&
-          !isJumping
-        ) {
-          ambientSound.play().catch((err) => {
-            console.log("Ambient sound play failed:", err);
-          });
-        }
-      }
-
-      // Stop ambient sound
-      function stopAmbientSound() {
-        if (ambientSound && !ambientSound.paused) {
-          ambientSound.pause();
-        }
-      }
-
-      // Pause audio when page becomes hidden (but don't reset, so we can resume)
-      function pauseAudioOnHide() {
-        // Track what was playing
-        wasMusicPlaying = backgroundMusic && !backgroundMusic.paused;
-        wasAmbientPlaying = ambientSound && !ambientSound.paused;
-
-        // Pause background music (but don't reset currentTime)
-        if (backgroundMusic && !backgroundMusic.paused) {
-          backgroundMusic.pause();
-        }
-
-        // Pause ambient sound (but don't reset currentTime)
-        if (ambientSound && !ambientSound.paused) {
-          ambientSound.pause();
-        }
-
-        // Pause all sound effects in the pool
-        if (audioPool) {
-          Object.keys(audioPool).forEach((key) => {
-            audioPool[key].forEach((audio) => {
-              if (!audio.paused) {
-                audio.pause();
-              }
-            });
-          });
-        }
-      }
-
-      // Resume audio when page becomes visible again (if it was playing before)
-      function resumeAudioOnShow() {
-        // Resume background music if it was playing and music is enabled
-        if (wasMusicPlaying && backgroundMusic && musicEnabled) {
-          backgroundMusic.play().catch((err) => {
-            console.log("Music resume failed:", err);
-          });
-        }
-
-        // Resume ambient sound if it was playing and conditions are met
-        if (
-          wasAmbientPlaying &&
-          ambientSound &&
-          ambientEnabled &&
-          gameActive &&
-          !isPaused &&
-          !isGameOver &&
-          !isJumping
-        ) {
-          ambientSound.play().catch((err) => {
-            console.log("Ambient sound resume failed:", err);
-          });
-        }
-      }
-
-      // Stop all audio completely (for window close)
-      function stopAllAudio() {
-        // Stop background music
-        if (backgroundMusic && !backgroundMusic.paused) {
-          backgroundMusic.pause();
-          backgroundMusic.currentTime = 0; // Reset to beginning
-        }
-
-        // Stop ambient sound
-        stopAmbientSound();
-        if (ambientSound) {
-          ambientSound.currentTime = 0; // Reset to beginning
-        }
-
-        // Stop all sound effects in the pool
-        if (audioPool) {
-          Object.keys(audioPool).forEach((key) => {
-            audioPool[key].forEach((audio) => {
-              if (!audio.paused) {
-                audio.pause();
-                audio.currentTime = 0;
-              }
-            });
-          });
-        }
-      }
-
-      // Play sound effect
-      // Play sound effect using audio pool
-      function playSound(soundName) {
-        if (!sfxEnabled || !audioPool[soundName]) return;
-
-        // Ensure audio is initialized before playing sounds (important for mobile)
-        if (!audioInitialized) {
-          initAudio();
-        }
-
-        // 1. Find the first "free" player in the pool
-        const pool = audioPool[soundName];
-        let player = pool.find((p) => p.paused);
-
-        // 2. If all players are busy, steal the first one (cut it off)
-        // This ensures the NEW sound (e.g., the second crash) is always heard.
-        if (!player) {
-          player = pool[0];
-          player.currentTime = 0; // Reset to start
-        }
-
-        // 3. Play immediately
-        player.play().catch((err) => {
-          // Mobile browsers sometimes reject plays if not triggered by user interaction.
-          // There is little we can do about this specific error, but pooling minimizes it.
-          // console.warn("Audio play blocked", err);
-        });
-      }
+      // Old audio code removed - using AudioManager now
 
       // Camera controls visibility state
       let cameraControlsEnabled = false;
@@ -1463,36 +1430,22 @@
         musicToggle.addEventListener("change", (e) => {
           musicEnabled = e.target.checked;
           saveAudioSettings();
-
-          if (musicEnabled && backgroundMusic) {
-            startMusic();
-          } else if (backgroundMusic) {
-            backgroundMusic.pause();
-          }
+          audio.setToggles({ musicEnabled });
         });
 
         // Ambient toggle
         ambientToggle.addEventListener("change", (e) => {
           ambientEnabled = e.target.checked;
           saveAudioSettings();
-
-          if (
-            ambientEnabled &&
-            gameActive &&
-            !isPaused &&
-            !isGameOver &&
-            !isJumping
-          ) {
-            startAmbientSound();
-          } else if (ambientSound) {
-            stopAmbientSound();
-          }
+          audio.setToggles({ ambientEnabled });
+          audio.ensureAmbient({ gameActive, isPaused, isGameOver, isJumping });
         });
 
         // SFX toggle (controls only sound effects, not ambient)
         sfxToggle.addEventListener("change", (e) => {
           sfxEnabled = e.target.checked;
           saveAudioSettings();
+          audio.setToggles({ sfxEnabled });
         });
 
         // Camera controls toggle
@@ -1763,14 +1716,9 @@
       }
 
       // --- START SCREEN ---
-      function startGame() {
-        // Ensure audio is initialized
-        if (!audioInitialized) {
-          initAudio();
-        } else {
-          // Try to start music again in case autoplay was blocked
-          startMusic();
-        }
+      async function startGame() {
+        // Unlock audio on Start button tap (iOS requirement)
+        await audio.unlock();
 
         const startScreen = document.getElementById("start-screen");
         if (startScreen) {
@@ -1810,8 +1758,9 @@
         gameActive = true;
         gameStarted = true;
 
-        // Start ambient sound when game starts
-        startAmbientSound();
+        // Start music and ambient sound when game starts
+        audio.ensureMusic();
+        audio.ensureAmbient({ gameActive, isPaused, isGameOver, isJumping });
       }
 
       function quitGame() {
@@ -1857,6 +1806,9 @@
         gameStarted = false;
         isGameOver = false;
         isPaused = false;
+
+        // Stop all audio
+        audio.stopAll();
       }
 
       // --- INITIALIZATION ---
@@ -1874,22 +1826,9 @@
           startButton.disabled = true;
           startButton.classList.add("loading");
           startButton.textContent = "Loading Assets... 0%";
-          startButton.addEventListener("click", () => {
+          startButton.addEventListener("click", async () => {
             if (!startButton.disabled) {
-              // iOS Audio Unlock: Warm up the audio engine
-              if (!audioInitialized) {
-                initAudio();
-
-                // TRICK: Play and immediately pause every sound type once
-                // This "warms up" the iOS audio engine for these specific files
-                Object.keys(audioPool).forEach((key) => {
-                  const p = audioPool[key][0];
-                  p.play()
-                    .then(() => p.pause())
-                    .catch(() => {});
-                });
-              }
-
+              await audio.unlock(); // Unlock audio on gesture
               startGame();
             }
           });
@@ -2043,23 +1982,29 @@
 
         // Stop audio completely when window/tab is closed
         window.addEventListener("beforeunload", () => {
-          stopAllAudio();
+          audio.stopAll();
         });
 
         // Pause/resume audio when page visibility changes (for PWA and tab switching)
         document.addEventListener("visibilitychange", () => {
           if (document.hidden) {
-            // Page is hidden - pause audio but remember what was playing
-            pauseAudioOnHide();
+            audio.stopAll();
           } else {
-            // Page is visible again - resume audio if it was playing before
-            resumeAudioOnShow();
+            // audio context may be suspended; only resume on gesture.
+            // But we can at least try:
+            audio.ensureMusic();
+            audio.ensureAmbient({
+              gameActive,
+              isPaused,
+              isGameOver,
+              isJumping,
+            });
           }
         });
 
         // Stop audio completely when page is being unloaded (for PWA)
         window.addEventListener("pagehide", () => {
-          stopAllAudio();
+          audio.stopAll();
         });
 
         // Initial trees will be spawned after the model loads (in loadTreeModel callback)
@@ -3626,7 +3571,12 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
             // (wasJumping will be true, isJumping will be false)
 
             // Resume ambient sound when jump ends
-            startAmbientSound();
+            audio.ensureAmbient({
+              gameActive,
+              isPaused,
+              isGameOver,
+              isJumping,
+            });
           }
         }
         player.position.y = CONFIG.worldRadius + playerHeight;
@@ -3849,7 +3799,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
             activeGift.mesh.getWorldPosition(_tempVec3);
             if (Math.abs(_tempVec3.x - pX) < 1.5) {
               // Gift collected!
-              playSound("twinkle");
+              audio.playSfx("twinkle");
               giftCollected = true;
 
               // Remove gift from scene
@@ -3975,7 +3925,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         startCrashAnimation();
 
         // Play crash sound: ouch_3
-        playSound("ouch3");
+        audio.playSfx("ouch3");
 
         // Check if game over
         if (lives <= 0) {
@@ -3988,10 +3938,10 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         gameActive = false;
 
         // Pause ambient ski noise
-        stopAmbientSound();
+        audio.ensureAmbient({ gameActive, isPaused, isGameOver, isJumping });
 
         // Play game over sound
-        playSound("ohNo");
+        audio.playSfx("ohNo");
 
         // Save high score
         saveHighScore();
@@ -4023,25 +3973,25 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           if (isPaused) {
             pauseButton.textContent = "▶️";
             pauseButton.title = "Resume";
-            // Pause ambient sound
-            if (ambientSound && !ambientSound.paused) {
-              ambientSound.pause();
-            }
-            // Pause background music
-            if (backgroundMusic && !backgroundMusic.paused) {
-              backgroundMusic.pause();
-            }
+            // Pause audio
+            audio.ensureMusic();
+            audio.ensureAmbient({
+              gameActive,
+              isPaused,
+              isGameOver,
+              isJumping,
+            });
           } else {
             pauseButton.textContent = "⏸️";
             pauseButton.title = "Pause";
-            // Resume ambient sound if enabled
-            startAmbientSound();
-            // Resume background music if music enabled
-            if (backgroundMusic && musicEnabled) {
-              backgroundMusic.play().catch((err) => {
-                console.log("Music resume failed:", err);
-              });
-            }
+            // Resume audio
+            audio.ensureMusic();
+            audio.ensureAmbient({
+              gameActive,
+              isPaused,
+              isGameOver,
+              isJumping,
+            });
           }
         }
       }
@@ -4173,7 +4123,8 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         }
 
         // Resume ambient sound if enabled
-        startAmbientSound();
+        audio.ensureMusic();
+        audio.ensureAmbient({ gameActive, isPaused, isGameOver, isJumping });
 
         // Reset gift state
         if (activeGift) {
@@ -4486,12 +4437,12 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         // Start turn animation
         if (direction > 0) {
           startRightTurn();
-          playSound("rightTurn");
-          playSound("thump");
+          audio.playSfx("rightTurn");
+          audio.playSfx("thump");
         } else if (direction < 0) {
           startLeftTurn();
-          playSound("leftTurn");
-          playSound("thump");
+          audio.playSfx("leftTurn");
+          audio.playSfx("thump");
         }
 
         // Initialize audio on first interaction
@@ -4601,11 +4552,11 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           verticalVelocity = CONFIG.jumpStrength;
 
           // Pause ambient sound during jump
-          stopAmbientSound();
+          audio.ensureAmbient({ gameActive, isPaused, isGameOver, isJumping });
 
           // Start jump animation
           startJumpAnimation();
-          playSound("jump");
+          audio.playSfx("jump");
         }
       }
 
@@ -4742,34 +4693,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         }
       }
 
-      // Initialize audio on first user interaction (required for autoplay)
-      let audioInitialized = false;
-      function initAudioOnInteraction() {
-        if (!audioInitialized) {
-          initAudio();
-        }
-      }
-
       init();
-
-      // Try to initialize audio immediately on page load
-      // If autoplay is blocked, it will be initialized on first user interaction
-      try {
-        initAudio();
-      } catch (err) {
-        console.log("Audio initialization deferred until user interaction");
-      }
-
-      // Listen for user interactions to enable audio (fallback if autoplay blocked)
-      document.addEventListener("click", initAudioOnInteraction, {
-        once: true,
-      });
-      document.addEventListener("keydown", initAudioOnInteraction, {
-        once: true,
-      });
-      document.addEventListener("touchstart", initAudioOnInteraction, {
-        once: true,
-      });
     </script>
   </body>
 </html>
