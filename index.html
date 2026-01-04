@@ -9,6 +9,7 @@
     <title>Alpine Rush: Pro Edition</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
     <style>
       /* CSS Reset */
       * {
@@ -1238,11 +1239,25 @@
       function playSound(soundName) {
         if (!sfxEnabled || !soundEffects[soundName]) return;
 
+        // Ensure audio is initialized before playing sounds (important for mobile)
+        if (!audioInitialized) {
+          initAudio();
+        }
+
         const sound = soundEffects[soundName].cloneNode();
         sound.volume = soundEffects[soundName].volume;
-        sound.play().catch((err) => {
-          console.log(`Sound effect ${soundName} failed:`, err);
-        });
+
+        // On mobile, ensure sound plays with user interaction context
+        const playPromise = sound.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((err) => {
+            console.log(`Sound effect ${soundName} failed:`, err);
+            // Try to initialize audio if play failed (mobile autoplay restrictions)
+            if (!audioInitialized) {
+              initAudio();
+            }
+          });
+        }
       }
 
       // Settings menu toggle
@@ -2053,7 +2068,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         player = playerGroup;
 
         // Load the GLB model
-        const loader = new THREE.GLTFLoader();
+        const loader = createGLTFLoader();
         loader.load(
           "/assets/models/skier_v1.glb",
           (gltf) => {
@@ -2259,8 +2274,22 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       let fenceModelTemplate = null;
       let giftModelTemplate = null;
 
-      function loadTreeModel() {
+      // Setup DRACO loader for compressed geometry
+      const dracoLoader = new THREE.DRACOLoader();
+      dracoLoader.setDecoderPath(
+        "https://www.gstatic.com/draco/versioned/decoders/1.5.6/"
+      );
+      dracoLoader.setDecoderConfig({ type: "js" });
+
+      // Helper function to create GLTFLoader with DRACO support
+      function createGLTFLoader() {
         const loader = new THREE.GLTFLoader();
+        loader.setDRACOLoader(dracoLoader);
+        return loader;
+      }
+
+      function loadTreeModel() {
+        const loader = createGLTFLoader();
         loader.load(
           "assets/models/alpine_tree_v1.glb",
           (gltf) => {
@@ -2291,7 +2320,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function loadRockModel() {
-        const loader = new THREE.GLTFLoader();
+        const loader = createGLTFLoader();
         loader.load(
           "assets/models/rock_v1.glb",
           (gltf) => {
@@ -2318,7 +2347,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function loadSignModel() {
-        const loader = new THREE.GLTFLoader();
+        const loader = createGLTFLoader();
 
         // Load red sign
         loader.load(
@@ -2376,7 +2405,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function loadFenceModel() {
-        const loader = new THREE.GLTFLoader();
+        const loader = createGLTFLoader();
         loader.load(
           "assets/models/wooden_fence_v1.glb",
           (gltf) => {
@@ -2403,7 +2432,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function loadGiftModel() {
-        const loader = new THREE.GLTFLoader();
+        const loader = createGLTFLoader();
         loader.load(
           "assets/models/gift_v1.glb",
           (gltf) => {
@@ -2460,7 +2489,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         });
 
         // Randomize scale - slight variation
-        const baseScale = isDecoration ? 5.0 : 8.0;
+        const baseScale = isDecoration ? 2.5 : 4.0;
         const scaleVariation = 0.8 + Math.random() * 0.5;
         const scale = baseScale * scaleVariation;
         tree.scale.set(scale, scale, scale);
@@ -2719,8 +2748,14 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           spawnTree(angle, false, lanes[0]);
           spawnBarrier(angle, lanes[1]);
         }
-        // Always spawn a decoration tree further out (not in lanes)
-        spawnTree(angle, true);
+        // Spawn decoration tree further out (not in lanes)
+        // Reduce spawn rate by 30% on mobile (70% chance)
+        const shouldSpawnDecorationTree = isMobile()
+          ? Math.random() < 0.7
+          : true;
+        if (shouldSpawnDecorationTree) {
+          spawnTree(angle, true);
+        }
       }
 
       function createGift() {
@@ -2998,10 +3033,14 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         }
 
         // Spawn Boundaries (only if game is active and not paused)
+        // Reduce spawn rate by 30% on mobile (increase interval by ~43%)
+        const boundaryInterval = isMobile()
+          ? CONFIG.boundaryInterval * 1.43 // 30% reduction = 1/0.7 ≈ 1.43x interval
+          : CONFIG.boundaryInterval;
         if (
           gameActive &&
           !isPaused &&
-          totalRotationForSpawn - lastBoundaryRotation > CONFIG.boundaryInterval
+          totalRotationForSpawn - lastBoundaryRotation > boundaryInterval
         ) {
           const bAngle = -worldSphere.rotation.x + 0.5;
           spawnBoundary(bAngle);
