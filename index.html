@@ -2886,13 +2886,20 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           );
           return;
         }
+        // Only spawn boundaries if instancers are ready
+        const boundariesReady =
+          fenceInstances && redSignInstances && blueSignInstances;
+
         // Initial Objects
         // Spawn ahead of player so they are visible immediately
         for (let i = 0; i < 30; i++) {
           // Spawn angle: 0.5 down to -1.0 (covering visible range)
           let angle = 0.5 - i * 0.05;
           spawnTree(angle, true);
-          spawnBoundary(angle);
+          // Only spawn boundaries if instancers are ready
+          if (boundariesReady) {
+            spawnBoundary(angle);
+          }
         }
       }
 
@@ -3618,18 +3625,23 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         }
 
         // Spawn Boundaries (only if game is active and not paused)
-        // Reduce spawn rate by 15% on mobile (increase interval by ~18%) - less reduction for better visuals
-        const boundaryInterval = isMobile()
-          ? CONFIG.boundaryInterval * 1.18 // 15% reduction = 1/0.85 ≈ 1.18x interval
-          : CONFIG.boundaryInterval;
-        if (
-          gameActive &&
-          !isPaused &&
-          totalRotationForSpawn - lastBoundaryRotation > boundaryInterval
-        ) {
-          const bAngle = -worldSphere.rotation.x + 0.5;
-          spawnBoundary(bAngle);
-          lastBoundaryRotation = totalRotationForSpawn;
+        // Only spawn if instancers are ready
+        const boundariesReady =
+          fenceInstances && redSignInstances && blueSignInstances;
+        if (boundariesReady) {
+          // Reduce spawn rate by 15% on mobile (increase interval by ~18%) - less reduction for better visuals
+          const boundaryInterval = isMobile()
+            ? CONFIG.boundaryInterval * 1.18 // 15% reduction = 1/0.85 ≈ 1.18x interval
+            : CONFIG.boundaryInterval;
+          if (
+            gameActive &&
+            !isPaused &&
+            totalRotationForSpawn - lastBoundaryRotation > boundaryInterval
+          ) {
+            const bAngle = -worldSphere.rotation.x + 0.5;
+            spawnBoundary(bAngle);
+            lastBoundaryRotation = totalRotationForSpawn;
+          }
         }
 
         // Spawn Gift (only if game is active, not paused, gift not collected)
@@ -3896,8 +3908,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
               // Easier to jump over: > 1.0 height required
               if (playerHeight > 1.0) {
                 obj.passed = true;
-                showJumpMsg();
-                score += 500;
+                // No bonus points for jumping - just avoid crash
               } else {
                 triggerCrash();
               }
@@ -4147,7 +4158,31 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         lastGiftSpawnDistance = 0;
 
         // Spawn initial trees and boundaries for new game
+        // Ensure boundaries spawn even if they weren't ready initially
         spawnInitialTrees();
+
+        // If boundaries weren't ready during initial spawn, spawn them now
+        // This handles the case where models load after game start
+        if (fenceInstances && redSignInstances && blueSignInstances) {
+          // Spawn boundaries ahead of player to fill the gap
+          const currentAngle = -worldSphere.rotation.x;
+          for (let i = 0; i < 30; i++) {
+            const angle = currentAngle + 0.5 - i * 0.05;
+            // Only spawn if not already spawned (check if boundary exists at this angle)
+            const existingBoundary = activeBoundaries.find(
+              (b) => Math.abs(b.angle - angle) < 0.01
+            );
+            if (!existingBoundary) {
+              spawnBoundary(angle);
+            }
+          }
+          // Update instance matrices after batch spawn
+          if (fenceInstances) fenceInstances.instanceMatrix.needsUpdate = true;
+          if (redSignInstances)
+            redSignInstances.instanceMatrix.needsUpdate = true;
+          if (blueSignInstances)
+            blueSignInstances.instanceMatrix.needsUpdate = true;
+        }
 
         // FINALLY: Set gameActive to true AFTER everything is reset
         // This prevents score accumulation during the reset process
