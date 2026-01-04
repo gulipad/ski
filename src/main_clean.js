@@ -1,0 +1,2917 @@
+// --- CONFIGURATION ---
+const CONFIG = {
+  baseSpeed: 0.003,
+  maxSpeed: 0.006, // Maximum speed (2x base speed)
+  accelerationRate: 0.000001, // Very slight acceleration per frame
+  turnSpeed: 0.25,
+  worldRadius: 100,
+  spawnInterval: 0.18,
+  boundaryInterval: 0.08,
+  laneWidth: 5,
+  gravity: 0.06, // Slightly higher gravity for snappier jumps
+  jumpStrength: 0.7, // Lower jump height
+  fogColor: 0x87ceeb,
+  treeVerticalOffset: 3, // Vertical offset for playing trees (adjustable)
+  giftVerticalOffset: 2, // Vertical offset for gift
+  groundColor: 0xffffff,
+};
+
+// --- GLOBAL VARIABLES ---
+let scene, camera, renderer;
+let player, playerGroup;
+let worldSphere;
+
+// Animation
+let mixer;
+let clock = new THREE.Clock();
+let skierModel;
+let skierBaseOffset = { x: 0, y: 0, z: 0 };
+let skierBones = {}; // Store bone references for manipulation
+
+// Subtle animation state for natural movement
+let animationTime = 0;
+let animationParams = {
+  pelvis: { baseY: 0, amplitude: 0.19 },
+  waist: { baseY: 0, amplitude: 0.2 },
+  head: { baseY: -0.47, amplitude: 0.19 },
+};
+const animationSpeed = 1.9;
+
+// Jump animation state
+let jumpAnimationSpeed = 1.0;
+let jumpAnimationParams = {
+  lUpperarmZ: -0.12,
+  rUpperarmZ: 0.02,
+  lThighY: -0.42,
+  rThighY: 0.63,
+};
+let jumpAnimationTime = 0;
+let lUpperarmBaseZ = 0;
+let rUpperarmBaseZ = 0;
+let lThighBaseY = 0;
+let rThighBaseY = 0;
+
+// Turn animation state
+let rightTurnSpeed = 1.0;
+let rightTurnParams = {
+  pelvisY: -1.02,
+  headY: 0.13,
+};
+let rightTurnBaseValues = { pelvisY: 0, headY: 0 };
+let isRightTurning = false;
+let rightTurnTime = 0;
+
+let leftTurnSpeed = 1.0;
+let leftTurnParams = {
+  pelvisY: -0.02,
+  headY: -0.87,
+};
+let leftTurnBaseValues = { pelvisY: 0, headY: 0 };
+let isLeftTurning = false;
+let leftTurnTime = 0;
+
+// Crash animation state
+let crashAnimationSpeed = 1.25;
+let crashAnimationParams = {
+  pelvisZ: -3.14,
+  hipX: 1.53,
+  hipY: -0.97,
+  hipZ: 0.83,
+  lThighY: 0.28,
+  lThighZ: 1.33,
+  rThighY: -0.27,
+  rThighZ: 1.33,
+  headZ: 0.88,
+  rHandY: -1.57,
+  lHandY: 1.53,
+};
+let crashBaseValues = {
+  pelvisZ: 0,
+  hipX: 0,
+  hipY: 0,
+  hipZ: 0,
+  lThighY: 0,
+  lThighZ: 0,
+  rThighY: 0,
+  rThighZ: 0,
+  headZ: 0,
+  rHandY: 0,
+  lHandY: 0,
+};
+let isCrashing = false;
+let crashTime = 0;
+
+let gameActive = false; // Start as false until start button is clicked
+let isPaused = false;
+let lives = 3;
+let isGameOver = false;
+let skierRollAwayRotation = 0;
+let crashCooldown = false; // Prevent multiple crashes in quick succession
+let crashCooldownTimeout = null; // Store timeout ID to clear it on restart
+let gameStarted = false; // Track if game has been started
+
+// Asset loading tracker
+const assetLoadingState = {
+  skier: false,
+  tree: false,
+  rock: false,
+  redSign: false,
+  blueSign: false,
+  fence: false,
+  gift: false,
+};
+
+function checkAllAssetsLoaded() {
+  const allLoaded = Object.values(assetLoadingState).every(
+    (loaded) => loaded === true
+  );
+  if (allLoaded) {
+    const startButton = document.getElementById("start-button");
+    if (startButton) {
+      startButton.disabled = false;
+      startButton.textContent = "Start Game";
+      startButton.classList.remove("loading");
+    }
+  }
+}
+
+function updateLoadingProgress() {
+  const loadedCount = Object.values(assetLoadingState).filter(
+    (loaded) => loaded === true
+  ).length;
+  const totalCount = Object.keys(assetLoadingState).length;
+  const percentage = Math.round((loadedCount / totalCount) * 100);
+  const startButton = document.getElementById("start-button");
+  if (startButton && startButton.disabled) {
+    startButton.textContent = `Loading Assets... ${percentage}%`;
+  }
+}
+
+// Audio system
+let musicEnabled = true;
+let ambientEnabled = true;
+let sfxEnabled = true;
+let backgroundMusic = null;
+let ambientSound = null;
+let ambientSoundBaseVolume = 0.6; // Store base volume for restoration
+let soundEffects = {
+  jump: null,
+  crash: null,
+  leftTurn: null,
+  rightTurn: null,
+  ouch3: null,
+  thump: null,
+  ohNo: null,
+};
+
+// Cookie helper functions
+function setCookie(name, value, days = 365) {
+  const expires = new Date();
+  expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+  document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+}
+
+function getCookie(name) {
+  const nameEQ = name + "=";
+  const ca = document.cookie.split(";");
+  for (let i = 0; i < ca.length; i++) {
+    let c = ca[i];
+    while (c.charAt(0) === " ") c = c.substring(1, c.length);
+    if (c.indexOf(nameEQ) === 0)
+      return c.substring(nameEQ.length, c.length);
+  }
+  return null;
+}
+
+// Load audio settings from cookies
+function loadAudioSettings() {
+  const musicCookie = getCookie("musicEnabled");
+  const ambientCookie = getCookie("ambientEnabled");
+  const sfxCookie = getCookie("sfxEnabled");
+
+  if (musicCookie !== null) {
+    musicEnabled = musicCookie === "true";
+  }
+  if (ambientCookie !== null) {
+    ambientEnabled = ambientCookie === "true";
+  }
+  if (sfxCookie !== null) {
+    sfxEnabled = sfxCookie === "true";
+  }
+
+  // Update UI
+  document.getElementById("music-toggle").checked = musicEnabled;
+  document.getElementById("ambient-toggle").checked = ambientEnabled;
+  document.getElementById("sfx-toggle").checked = sfxEnabled;
+}
+
+// Save audio settings to cookies
+function saveAudioSettings() {
+  setCookie("musicEnabled", musicEnabled);
+  setCookie("ambientEnabled", ambientEnabled);
+  setCookie("sfxEnabled", sfxEnabled);
+}
+
+// Initialize audio
+function initAudio() {
+  if (audioInitialized) return; // Prevent double initialization
+
+  // Background music
+  backgroundMusic = new Audio("/assets/audio/music.mp3");
+  backgroundMusic.loop = true;
+  backgroundMusic.volume = 0.5;
+
+  // Ambient snow sliding sound
+  ambientSound = new Audio("/assets/audio/snow-sliding.mp3");
+  ambientSound.loop = true;
+  ambientSound.volume = ambientSoundBaseVolume;
+
+  // Sound effects
+  soundEffects.jump = new Audio("/assets/audio/jump.mp3");
+  soundEffects.jump.volume = 0.6;
+
+  soundEffects.crash = new Audio("/assets/audio/crash.mp3");
+  soundEffects.crash.volume = 0.7;
+
+  soundEffects.leftTurn = new Audio("/assets/audio/turn.mp3");
+  soundEffects.leftTurn.volume = 0.4;
+
+  soundEffects.rightTurn = new Audio("/assets/audio/turn.mp3");
+  soundEffects.rightTurn.volume = 0.4;
+
+  soundEffects.ouch3 = new Audio("/assets/audio/ouch_3.mp3");
+  soundEffects.ouch3.volume = 0.7;
+
+  soundEffects.thump = new Audio("/assets/audio/thump.mp3");
+  soundEffects.thump.volume = 0.6;
+
+  soundEffects.ohNo = new Audio("/assets/audio/oh_no.mp3");
+  soundEffects.ohNo.volume = 0.7;
+
+  soundEffects.twinkle = new Audio("/assets/audio/twinkle.mp3");
+  soundEffects.twinkle.volume = 0.8;
+
+  // Start music if enabled
+  startMusic();
+
+  audioInitialized = true;
+}
+
+// Start music
+function startMusic() {
+  if (backgroundMusic && musicEnabled) {
+    backgroundMusic.play().catch((err) => {
+      console.log("Music play failed:", err);
+    });
+  }
+}
+
+// Start ambient sound
+function startAmbientSound() {
+  if (
+    ambientSound &&
+    ambientEnabled &&
+    gameActive &&
+    !isPaused &&
+    !isGameOver &&
+    !isJumping
+  ) {
+    ambientSound.play().catch((err) => {
+      console.log("Ambient sound play failed:", err);
+    });
+  }
+}
+
+// Stop ambient sound
+function stopAmbientSound() {
+  if (ambientSound && !ambientSound.paused) {
+    ambientSound.pause();
+  }
+}
+
+// Play sound effect
+function playSound(soundName) {
+  if (!sfxEnabled || !soundEffects[soundName]) return;
+
+  const sound = soundEffects[soundName].cloneNode();
+  sound.volume = soundEffects[soundName].volume;
+  sound.play().catch((err) => {
+    console.log(`Sound effect ${soundName} failed:`, err);
+  });
+}
+
+// Settings menu toggle
+function setupSettingsMenu() {
+  const settingsButton = document.getElementById("settings-button");
+  const settingsMenu = document.getElementById("settings-menu");
+  const musicToggle = document.getElementById("music-toggle");
+  const ambientToggle = document.getElementById("ambient-toggle");
+  const sfxToggle = document.getElementById("sfx-toggle");
+
+  settingsButton.addEventListener("click", () => {
+    settingsMenu.classList.toggle("visible");
+  });
+
+  // Close menu when clicking outside
+  document.addEventListener("click", (e) => {
+    if (
+      !settingsMenu.contains(e.target) &&
+      !settingsButton.contains(e.target)
+    ) {
+      settingsMenu.classList.remove("visible");
+    }
+  });
+
+  // Music toggle
+  musicToggle.addEventListener("change", (e) => {
+    musicEnabled = e.target.checked;
+    saveAudioSettings();
+
+    if (musicEnabled && backgroundMusic) {
+      startMusic();
+    } else if (backgroundMusic) {
+      backgroundMusic.pause();
+    }
+  });
+
+  // Ambient toggle
+  ambientToggle.addEventListener("change", (e) => {
+    ambientEnabled = e.target.checked;
+    saveAudioSettings();
+
+    if (
+      ambientEnabled &&
+      gameActive &&
+      !isPaused &&
+      !isGameOver &&
+      !isJumping
+    ) {
+      startAmbientSound();
+    } else if (ambientSound) {
+      stopAmbientSound();
+    }
+  });
+
+  // SFX toggle (controls only sound effects, not ambient)
+  sfxToggle.addEventListener("change", (e) => {
+    sfxEnabled = e.target.checked;
+    saveAudioSettings();
+  });
+}
+let score = 0;
+let highScore = 0;
+
+// Load high score from localStorage
+function loadHighScore() {
+  const stored = localStorage.getItem("skiGameHighScore");
+  if (stored !== null) {
+    highScore = parseInt(stored, 10);
+    updateHighScoreDisplay();
+  }
+}
+
+// Save high score to localStorage
+function saveHighScore() {
+  if (score > highScore) {
+    highScore = score;
+    localStorage.setItem("skiGameHighScore", highScore.toString());
+    updateHighScoreDisplay();
+  }
+}
+
+// Update high score display
+function updateHighScoreDisplay() {
+  const highScoreElement = document.getElementById("high-score");
+  if (highScoreElement) {
+    highScoreElement.textContent = `Best: ${Math.floor(highScore)}m`;
+  }
+  const highScoreValueElement =
+    document.getElementById("high-score-value");
+  if (highScoreValueElement) {
+    highScoreValueElement.textContent = Math.floor(highScore);
+  }
+}
+
+// Update lives display
+function updateLivesDisplay() {
+  const livesElement = document.getElementById("lives");
+  if (livesElement) {
+    const hearts = "❤️".repeat(lives) + "🤍".repeat(3 - lives);
+    livesElement.textContent = hearts;
+  }
+}
+let currentRotationSpeed = CONFIG.baseSpeed;
+
+let currentLane = 0;
+let targetX = 0;
+
+let isJumping = false;
+let verticalVelocity = 0;
+let playerHeight = 0;
+
+let lastSpawnRotation = 0;
+let lastBoundaryRotation = 0;
+let boundaryAlternator = 0;
+
+let activeObstacles = [];
+let activeBarriers = [];
+let activeBoundaries = [];
+let activeGift = null; // Only one gift at a time
+let giftCollected = false; // Track if gift has been collected
+let lastGiftSpawnDistance = 0; // Track distance when last gift was spawned
+
+// Detect mobile device
+function isMobile() {
+  return (
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    ) || window.innerWidth <= 768
+  );
+}
+
+// Camera State (User Values applied here)
+let camParams = isMobile()
+  ? {
+      y: 112,
+      z: 26,
+      lookY: 57,
+      lookZ: -50,
+      fov: 93,
+    }
+  : {
+      y: 114,
+      z: 42,
+      lookY: 92,
+      lookZ: -9,
+      fov: 38,
+    };
+
+// Skier Transform State
+let skierParams = {
+  scale: 4.4,
+  posX: -0.2,
+  posY: 0.6,
+  posZ: -0.3,
+  rotX: 0.06,
+  rotY: 3.06,
+  rotZ: -0.04,
+};
+
+// Bone rotation state
+let boneParams = {};
+
+// --- HELPER: TEXTURES ---
+// --- START SCREEN ---
+function startGame() {
+  // Ensure audio is initialized
+  if (!audioInitialized) {
+    initAudio();
+  } else {
+    // Try to start music again in case autoplay was blocked
+    startMusic();
+  }
+
+  const startScreen = document.getElementById("start-screen");
+  if (startScreen) {
+    startScreen.classList.add("hidden");
+
+    // Wait for fade out animation before starting game
+    setTimeout(() => {
+      startScreen.style.display = "none";
+    }, 500);
+  }
+
+  // Show game UI elements
+  const uiLayer = document.getElementById("ui-layer");
+  if (uiLayer) {
+    uiLayer.classList.add("visible");
+  }
+
+  const settingsButton = document.getElementById("settings-button");
+  if (settingsButton) {
+    settingsButton.classList.add("visible");
+  }
+
+  const pauseButton = document.getElementById("pause-button");
+  if (pauseButton) {
+    pauseButton.classList.add("visible");
+  }
+
+  // Reset gift state for new game
+  if (activeGift) {
+    worldSphere.remove(activeGift.mesh);
+  }
+  activeGift = null;
+  giftCollected = false;
+  lastGiftSpawnDistance = 0;
+
+  // Start the game
+  gameActive = true;
+  gameStarted = true;
+
+  // Start ambient sound when game starts
+  startAmbientSound();
+}
+
+function quitGame() {
+  // Hide game over screen
+  const gameOverScreen = document.getElementById("game-over-screen");
+  if (gameOverScreen) {
+    gameOverScreen.classList.remove("visible");
+  }
+
+  // Show start screen
+  const startScreen = document.getElementById("start-screen");
+  if (startScreen) {
+    startScreen.style.display = "flex";
+    startScreen.classList.remove("hidden");
+  }
+
+  // Hide game UI elements
+  const uiLayer = document.getElementById("ui-layer");
+  if (uiLayer) {
+    uiLayer.classList.remove("visible");
+  }
+
+  const settingsButton = document.getElementById("settings-button");
+  if (settingsButton) {
+    settingsButton.classList.remove("visible");
+  }
+
+  const pauseButton = document.getElementById("pause-button");
+  if (pauseButton) {
+    pauseButton.classList.remove("visible");
+  }
+
+  // Reset gift state
+  if (activeGift) {
+    worldSphere.remove(activeGift.mesh);
+  }
+  activeGift = null;
+  giftCollected = false;
+  lastGiftSpawnDistance = 0;
+
+  // Reset game state
+  gameActive = false;
+  gameStarted = false;
+  isGameOver = false;
+  isPaused = false;
+}
+
+// --- INITIALIZATION ---
+function init() {
+  // Load high score
+  loadHighScore();
+
+  // Initialize lives display
+  updateLivesDisplay();
+
+  // Setup start button
+  const startButton = document.getElementById("start-button");
+  if (startButton) {
+    // Initially disable button and show loading state
+    startButton.disabled = true;
+    startButton.classList.add("loading");
+    startButton.textContent = "Loading Assets... 0%";
+    startButton.addEventListener("click", () => {
+      if (!startButton.disabled) {
+        startGame();
+      }
+    });
+  }
+
+  // Setup retry button
+  const retryButton = document.getElementById("retry-button");
+  if (retryButton) {
+    retryButton.addEventListener("click", restartGame);
+  }
+
+  // Setup quit button
+  const quitButton = document.getElementById("quit-button");
+  if (quitButton) {
+    quitButton.addEventListener("click", quitGame);
+  }
+
+  // Setup pause button
+  const pauseButton = document.getElementById("pause-button");
+  if (pauseButton) {
+    pauseButton.addEventListener("click", togglePause);
+  }
+
+  // Load audio settings from cookies
+  loadAudioSettings();
+
+  // Setup settings menu
+  setupSettingsMenu();
+
+  // Initialize audio (after user interaction)
+  // Audio will be initialized on first user interaction
+  // Load models
+  loadTreeModel();
+  loadRockModel();
+  loadSignModel();
+  loadFenceModel();
+  loadGiftModel();
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(CONFIG.fogColor);
+  scene.fog = new THREE.Fog(CONFIG.fogColor, 60, 120);
+
+  camera = new THREE.PerspectiveCamera(
+    camParams.fov,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    300
+  );
+  updateCamera();
+
+  // Mobile performance optimizations
+  const isMobileDevice = isMobile();
+  const pixelRatio = isMobileDevice
+    ? Math.min(window.devicePixelRatio, 1.5)
+    : window.devicePixelRatio;
+
+  renderer = new THREE.WebGLRenderer({
+    antialias: !isMobileDevice, // Disable antialiasing on mobile
+    alpha: false,
+    powerPreference: "high-performance",
+  });
+  renderer.setPixelRatio(pixelRatio); // Limit pixel ratio on mobile
+  renderer.setSize(window.innerWidth, window.innerHeight);
+
+  // Shadows: reduce quality on mobile for better performance
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = isMobileDevice
+    ? THREE.BasicShadowMap
+    : THREE.PCFSoftShadowMap;
+  document.body.appendChild(renderer.domElement);
+
+  // Lighting - match pose editor for consistent look
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+  scene.add(ambientLight);
+
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+  dirLight.position.set(10, 20, 10);
+  dirLight.castShadow = true;
+  // Reduce shadow map resolution on mobile (2048 -> 512)
+  const shadowMapSize = isMobileDevice ? 512 : 2048;
+  dirLight.shadow.mapSize.width = shadowMapSize;
+  dirLight.shadow.mapSize.height = shadowMapSize;
+  dirLight.shadow.camera.near = 0.5;
+  dirLight.shadow.camera.far = 200;
+  dirLight.shadow.camera.left = -50;
+  dirLight.shadow.camera.right = 50;
+  dirLight.shadow.camera.top = 50;
+  dirLight.shadow.camera.bottom = -50;
+  scene.add(dirLight);
+
+  // Add a subtle fill light from the front for better model visibility
+  const fillLight = new THREE.DirectionalLight(0x87ceeb, 0.4);
+  fillLight.position.set(-10, 10, -10);
+  scene.add(fillLight);
+
+  const sphereGeo = new THREE.SphereGeometry(CONFIG.worldRadius, 64, 64);
+  const sphereMat = new THREE.MeshLambertMaterial({
+    color: CONFIG.groundColor,
+  });
+  worldSphere = new THREE.Mesh(sphereGeo, sphereMat);
+  worldSphere.receiveShadow = !isMobile(); // Disable shadow receiving on mobile for performance
+  scene.add(worldSphere);
+
+  createPlayer();
+
+  window.addEventListener("resize", onWindowResize, false);
+  document.addEventListener("keydown", onKeyDown, false);
+  setupSwipeControls();
+  setupDebugControls();
+  setupSkierControls();
+
+  // Initial trees will be spawned after the model loads (in loadTreeModel callback)
+  // Don't spawn them here to avoid fallback procedural trees
+
+  animate();
+}
+
+function setupDebugControls() {
+  const header = document.getElementById("debug-header");
+  const panel = document.getElementById("debug-panel");
+  const icon = document.getElementById("toggle-icon");
+
+  header.addEventListener("click", () => {
+    panel.classList.toggle("collapsed");
+    icon.innerText = panel.classList.contains("collapsed") ? "▼" : "▲";
+  });
+
+  document.getElementById("camY").value = camParams.y;
+  document.getElementById("camZ").value = camParams.z;
+  document.getElementById("lookY").value = camParams.lookY;
+  document.getElementById("lookZ").value = camParams.lookZ;
+  document.getElementById("camFov").value = camParams.fov;
+
+  updateDebugDisplay();
+
+  const inputs = ["camY", "camZ", "lookY", "lookZ", "camFov"];
+  inputs.forEach((id) => {
+    document.getElementById(id).addEventListener("input", (e) => {
+      const val = parseFloat(e.target.value);
+      if (id === "camY") camParams.y = val;
+      if (id === "camZ") camParams.z = val;
+      if (id === "lookY") camParams.lookY = val;
+      if (id === "lookZ") camParams.lookZ = val;
+      if (id === "camFov") camParams.fov = val;
+      updateCamera();
+      updateDebugDisplay();
+    });
+  });
+}
+
+function updateCamera() {
+  camera.position.set(0, camParams.y, camParams.z);
+  camera.lookAt(0, camParams.lookY, camParams.lookZ);
+  camera.fov = camParams.fov;
+  camera.updateProjectionMatrix();
+}
+
+function updateDebugDisplay() {
+  document.getElementById("valY").innerText = camParams.y;
+  document.getElementById("valZ").innerText = camParams.z;
+  document.getElementById("valLookY").innerText = camParams.lookY;
+  document.getElementById("valLookZ").innerText = camParams.lookZ;
+  document.getElementById("valFov").innerText = camParams.fov;
+
+  const txt = `
+camera.position.set(0, ${camParams.y}, ${camParams.z});<br>
+camera.lookAt(0, ${camParams.lookY}, ${camParams.lookZ});<br>
+fov: ${camParams.fov}
+      `;
+  document.getElementById("camera-readout").innerHTML = txt;
+}
+
+function setupSkierControls() {
+  const header = document.getElementById("skier-header");
+  const panel = document.getElementById("skier-panel");
+  const icon = document.getElementById("skier-toggle-icon");
+
+  header.addEventListener("click", () => {
+    panel.classList.toggle("collapsed");
+    icon.innerText = panel.classList.contains("collapsed") ? "▼" : "▲";
+  });
+
+  // Set initial values
+  document.getElementById("skierScale").value = skierParams.scale;
+  document.getElementById("skierX").value = skierParams.posX;
+  document.getElementById("skierY").value = skierParams.posY;
+  document.getElementById("skierZ").value = skierParams.posZ;
+  document.getElementById("skierRotX").value = skierParams.rotX;
+  document.getElementById("skierRotY").value = skierParams.rotY;
+  document.getElementById("skierRotZ").value = skierParams.rotZ;
+
+  updateSkierDisplay();
+
+  // Setup event listeners
+  document.getElementById("skierScale").addEventListener("input", (e) => {
+    skierParams.scale = parseFloat(e.target.value);
+    updateSkierTransform();
+    updateSkierDisplay();
+  });
+
+  ["skierX", "skierY", "skierZ"].forEach((id) => {
+    document.getElementById(id).addEventListener("input", (e) => {
+      const val = parseFloat(e.target.value);
+      if (id === "skierX") skierParams.posX = val;
+      if (id === "skierY") skierParams.posY = val;
+      if (id === "skierZ") skierParams.posZ = val;
+      updateSkierTransform();
+      updateSkierDisplay();
+    });
+  });
+
+  ["skierRotX", "skierRotY", "skierRotZ"].forEach((id) => {
+    document.getElementById(id).addEventListener("input", (e) => {
+      const val = parseFloat(e.target.value);
+      if (id === "skierRotX") skierParams.rotX = val;
+      if (id === "skierRotY") skierParams.rotY = val;
+      if (id === "skierRotZ") skierParams.rotZ = val;
+      updateSkierTransform();
+      updateSkierDisplay();
+    });
+  });
+}
+
+function updateSkierTransform() {
+  if (skierModel) {
+    skierModel.scale.set(
+      skierParams.scale,
+      skierParams.scale,
+      skierParams.scale
+    );
+    skierModel.position.x = skierBaseOffset.x + skierParams.posX;
+    skierModel.position.y = skierBaseOffset.y + skierParams.posY;
+    skierModel.position.z = skierBaseOffset.z + skierParams.posZ;
+    skierModel.rotation.x = skierParams.rotX;
+    skierModel.rotation.y = skierParams.rotY;
+    skierModel.rotation.z = skierParams.rotZ;
+  }
+}
+
+function setupBoneControls(boneNames) {
+  const boneControlsDiv = document.getElementById("bone-controls");
+  const boneControlsContent = document.getElementById(
+    "bone-controls-content"
+  );
+
+  // Show the bone controls section
+  boneControlsDiv.style.display = "block";
+
+  // Setup skiing pose button
+  const skiingPoseBtn = document.getElementById("apply-skiing-pose");
+  if (skiingPoseBtn) {
+    skiingPoseBtn.addEventListener("click", applySkiingPose);
+  }
+
+  // Filter for common body parts (arms, legs, head, etc.)
+  // Include bones with L_ or R_ prefix and main body bones
+  const relevantBones = boneNames.filter((name) => {
+    const lower = name.toLowerCase();
+    // Include main bones (skip twist bones for cleaner UI)
+    return (
+      (lower.includes("arm") && !lower.includes("twist")) ||
+      (lower.includes("hand") && !lower.includes("twist")) ||
+      (lower.includes("thigh") && !lower.includes("twist")) ||
+      (lower.includes("calf") && !lower.includes("twist")) ||
+      (lower.includes("foot") && !lower.includes("twist")) ||
+      lower.includes("head") ||
+      lower.includes("neck") ||
+      lower.includes("clavicle") ||
+      lower.includes("spine") ||
+      lower.includes("waist") ||
+      lower.includes("pelvis") ||
+      lower.includes("hip")
+    );
+  });
+
+  // If no obvious body parts, show main bones (skip twist bones)
+  const bonesToShow =
+    relevantBones.length > 0
+      ? relevantBones
+      : boneNames
+          .filter((n) => !n.toLowerCase().includes("twist"))
+          .slice(0, 15);
+
+  bonesToShow.forEach((boneName) => {
+    // Initialize bone params
+    if (!boneParams[boneName]) {
+      boneParams[boneName] = { x: 0, y: 0, z: 0 };
+    }
+
+    // Create bone control group
+    const boneGroup = document.createElement("div");
+    boneGroup.style.marginBottom = "12px";
+    boneGroup.style.paddingBottom = "8px";
+    boneGroup.style.borderBottom = "1px solid #444";
+
+    const boneTitle = document.createElement("div");
+    boneTitle.style.fontSize = "0.8rem";
+    boneTitle.style.color = "#f1c40f";
+    boneTitle.style.marginBottom = "5px";
+    boneTitle.style.fontWeight = "bold";
+    boneTitle.textContent = boneName;
+    boneGroup.appendChild(boneTitle);
+
+    // Create rotation controls for X, Y, Z
+    ["X", "Y", "Z"].forEach((axis) => {
+      const controlGroup = document.createElement("div");
+      controlGroup.className = "control-group";
+      controlGroup.style.marginBottom = "4px";
+
+      const label = document.createElement("label");
+      label.textContent = `Rot ${axis}`;
+      label.style.width = "60px";
+      controlGroup.appendChild(label);
+
+      const input = document.createElement("input");
+      input.type = "range";
+      input.id = `bone_${boneName}_${axis}`;
+      input.min = "-1.57";
+      input.max = "1.57";
+      input.step = "0.05";
+      input.value = boneParams[boneName][axis.toLowerCase()];
+      input.style.width = "140px";
+      controlGroup.appendChild(input);
+
+      const span = document.createElement("span");
+      span.id = `val_bone_${boneName}_${axis}`;
+      span.textContent = "0.00";
+      span.style.width = "40px";
+      span.style.textAlign = "right";
+      span.style.fontSize = "0.8rem";
+      span.style.color = "#ccc";
+      controlGroup.appendChild(span);
+
+      boneGroup.appendChild(controlGroup);
+
+      // Add event listener
+      input.addEventListener("input", (e) => {
+        const val = parseFloat(e.target.value);
+        boneParams[boneName][axis.toLowerCase()] = val;
+        updateBoneRotation(boneName);
+        span.textContent = val.toFixed(2);
+      });
+    });
+
+    boneControlsContent.appendChild(boneGroup);
+  });
+}
+
+function applySkiingPose() {
+  // Natural skiing pose - arms forward holding poles, legs bent, body leaning forward
+  const skiingPose = {
+    Root: { x: -1.57, y: 0.0, z: 1.57 },
+    Hip: { x: 0.73, y: -0.83, z: -0.14 },
+    Pelvis: { x: -2.2, y: -0.65, z: -2.44 },
+    L_Thigh: { x: -3.06, y: 0.01, z: 0.6 },
+    L_Calf: { x: 0.01, y: -0.01, z: -0.96 },
+    L_Foot: { x: 1.02, y: 0.42, z: 1.5 },
+    L_CalfTwist01: { x: -0.0, y: 0.0, z: -0.0 },
+    L_CalfTwist02: { x: -0.0, y: 0.0, z: 0.0 },
+    L_ThighTwist01: { x: 0.0, y: 0.0, z: -0.0 },
+    L_ThighTwist02: { x: 0.0, y: -0.0, z: 0.0 },
+    R_Thigh: { x: -2.88, y: 0.03, z: 0.6 },
+    R_ThighTwist01: { x: 0.0, y: -0.0, z: -0.0 },
+    R_ThighTwist02: { x: -0.0, y: -0.0, z: 0.0 },
+    R_Calf: { x: -0.22, y: 0.11, z: -0.8 },
+    R_Foot: { x: 1.12, y: 0.31, z: 1.4 },
+    R_CalfTwist01: { x: 0.0, y: -0.0, z: 0.0 },
+    R_CalfTwist02: { x: -0.0, y: -0.0, z: 0.0 },
+    Waist: { x: -2.2, y: -0.65, z: -2.44 },
+    Spine01: { x: -0.0, y: -0.0, z: -0.0 },
+    Spine02: { x: 0.0, y: 0.0, z: 0.0 },
+    NeckTwist01: { x: 0.0, y: -0.0, z: -0.0 },
+    NeckTwist02: { x: 0.0, y: 0.0, z: 0.0 },
+    Head: { x: -0.0, y: -0.47, z: -0.0 },
+    L_Clavicle: { x: -2.37, y: -1.39, z: 2.39 },
+    L_Upperarm: { x: 0.36, y: -0.0, z: -1.03 },
+    L_Forearm: { x: 1.22, y: 0.99, z: -0.27 },
+    L_ForearmTwist01: { x: -0.0, y: -0.0, z: -0.0 },
+    L_ForearmTwist02: { x: 0.0, y: -0.0, z: 0.0 },
+    L_Hand: { x: -0.0, y: -0.0, z: 0.0 },
+    L_UpperarmTwist01: { x: 0.0, y: 0.0, z: -0.0 },
+    L_UpperarmTwist02: { x: 0.0, y: 0.0, z: 0.0 },
+    R_Clavicle: { x: -2.24, y: -1.41, z: -0.84 },
+    R_Upperarm: { x: -0.32, y: 0.13, z: 0.88 },
+    R_UpperarmTwist01: { x: -0.0, y: -0.0, z: -0.0 },
+    R_UpperarmTwist02: { x: -0.0, y: -0.0, z: 0.0 },
+    R_Forearm: { x: 1.38, y: -0.02, z: 0.48 },
+    R_ForearmTwist01: { x: 0.0, y: -0.0, z: 0.0 },
+    R_ForearmTwist02: { x: -0.0, y: 0.0, z: -0.0 },
+    R_Hand: { x: 0.03, y: 0.38, z: 0.08 },
+  };
+
+  // Apply the pose
+  Object.keys(skiingPose).forEach((boneName) => {
+    if (skierBones[boneName] && skiingPose[boneName]) {
+      const pose = skiingPose[boneName];
+      boneParams[boneName] = {
+        x: pose.x || 0,
+        y: pose.y || 0,
+        z: pose.z || 0,
+      };
+
+      // Store base values for animated bones
+      if (boneName === "Pelvis") {
+        animationParams.pelvis.baseY = boneParams[boneName].y;
+      } else if (boneName === "Waist") {
+        animationParams.waist.baseY = boneParams[boneName].y;
+      } else if (boneName === "Head") {
+        animationParams.head.baseY = boneParams[boneName].y;
+      } else if (boneName === "L_Upperarm") {
+        lUpperarmBaseZ = boneParams[boneName].z;
+      } else if (boneName === "R_Upperarm") {
+        rUpperarmBaseZ = boneParams[boneName].z;
+      } else if (boneName === "L_Thigh") {
+        lThighBaseY = boneParams[boneName].y;
+      } else if (boneName === "R_Thigh") {
+        rThighBaseY = boneParams[boneName].y;
+      }
+
+      // Update the bone rotation
+      updateBoneRotation(boneName);
+
+      // Update UI sliders if they exist
+      ["X", "Y", "Z"].forEach((axis) => {
+        const inputId = `bone_${boneName}_${axis}`;
+        const spanId = `val_bone_${boneName}_${axis}`;
+        const input = document.getElementById(inputId);
+        const span = document.getElementById(spanId);
+
+        if (input && span) {
+          const val = boneParams[boneName][axis.toLowerCase()];
+          input.value = val;
+          span.textContent = val.toFixed(2);
+        }
+      });
+    }
+  });
+
+  console.log("Skiing pose applied!");
+}
+
+function updateBoneRotation(boneName) {
+  if (skierBones[boneName] && boneParams[boneName]) {
+    const bone = skierBones[boneName];
+    const params = boneParams[boneName];
+
+    // Create Euler rotation from individual axis rotations
+    const euler = new THREE.Euler(params.x, params.y, params.z, "XYZ");
+
+    // Apply rotation (using quaternion for better bone manipulation)
+    bone.quaternion.setFromEuler(euler);
+
+    // Update skeleton if it exists
+    if (
+      skierModel &&
+      skierModel.children[0] &&
+      skierModel.children[0].skeleton
+    ) {
+      skierModel.children[0].skeleton.update();
+    }
+  }
+}
+
+function updateSkierDisplay() {
+  document.getElementById("valSkierScale").innerText =
+    skierParams.scale.toFixed(1);
+  document.getElementById("valSkierX").innerText =
+    skierParams.posX.toFixed(2);
+  document.getElementById("valSkierY").innerText =
+    skierParams.posY.toFixed(2);
+  document.getElementById("valSkierZ").innerText =
+    skierParams.posZ.toFixed(2);
+  document.getElementById("valSkierRotX").innerText =
+    skierParams.rotX.toFixed(2);
+  document.getElementById("valSkierRotY").innerText =
+    skierParams.rotY.toFixed(2);
+  document.getElementById("valSkierRotZ").innerText =
+    skierParams.rotZ.toFixed(2);
+
+  const txt = `
+skierModel.scale.set(${skierParams.scale.toFixed(
+    1
+  )}, ${skierParams.scale.toFixed(1)}, ${skierParams.scale.toFixed(
+    1
+  )});<br>
+skierModel.position.set(${skierParams.posX.toFixed(
+    2
+  )}, ${skierParams.posY.toFixed(2)}, ${skierParams.posZ.toFixed(2)});<br>
+skierModel.rotation.set(${skierParams.rotX.toFixed(
+    2
+  )}, ${skierParams.rotY.toFixed(2)}, ${skierParams.rotZ.toFixed(2)});
+  `;
+  document.getElementById("skier-readout").innerHTML = txt;
+}
+
+function createPlayer() {
+  playerGroup = new THREE.Group();
+  playerGroup.position.set(0, CONFIG.worldRadius, 0);
+  scene.add(playerGroup);
+  player = playerGroup;
+
+  // Load the GLB model
+  const loader = new THREE.GLTFLoader();
+  loader.load(
+    "/assets/models/skier_v1.glb",
+    (gltf) => {
+      skierModel = gltf.scene;
+
+      // Center the model and position it on the ground (base positioning)
+      const box = new THREE.Box3().setFromObject(skierModel);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+
+      // Center horizontally but keep feet on ground (base offset)
+      skierBaseOffset.x = -center.x;
+      skierBaseOffset.y = -box.min.y;
+      skierBaseOffset.z = -center.z;
+
+      // Apply user-controlled transforms
+      skierModel.scale.set(
+        skierParams.scale,
+        skierParams.scale,
+        skierParams.scale
+      );
+      skierModel.position.x = skierBaseOffset.x + skierParams.posX;
+      skierModel.position.y = skierBaseOffset.y + skierParams.posY;
+      skierModel.position.z = skierBaseOffset.z + skierParams.posZ;
+      skierModel.rotation.x = skierParams.rotX;
+      skierModel.rotation.y = skierParams.rotY;
+      skierModel.rotation.z = skierParams.rotZ;
+
+      // Enable shadows and brighten materials (disable on mobile for performance)
+      const enableShadows = !isMobile();
+      skierModel.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = enableShadows;
+          child.receiveShadow = enableShadows;
+
+          // Fix dark materials - make them brighter and more responsive to light
+          if (child.material) {
+            // If it's a PBR material, adjust it
+            if (child.material.metalness !== undefined) {
+              child.material.metalness = Math.min(
+                child.material.metalness,
+                0.1
+              );
+              child.material.roughness = Math.max(
+                child.material.roughness,
+                0.8
+              );
+            }
+
+            // Brighten the material
+            if (child.material.color) {
+              child.material.color.multiplyScalar(1.5);
+            }
+
+            // Add emissive for slight self-illumination
+            if (child.material.emissive) {
+              child.material.emissive.setRGB(0.1, 0.1, 0.1);
+              child.material.emissiveIntensity = 0.3;
+            }
+
+            child.material.needsUpdate = true;
+          }
+        }
+
+        // Store bones for manipulation
+        if (child.isBone || child.type === "Bone") {
+          skierBones[child.name] = child;
+          console.log("Found bone:", child.name);
+        }
+      });
+
+      // Also check for skeleton in the scene
+      if (gltf.scene.children[0] && gltf.scene.children[0].skeleton) {
+        const skeleton = gltf.scene.children[0].skeleton;
+        skeleton.bones.forEach((bone) => {
+          skierBones[bone.name] = bone;
+          console.log("Found skeleton bone:", bone.name);
+        });
+      }
+
+      // Log all found bones
+      const boneNames = Object.keys(skierBones);
+      console.log("Total bones found:", boneNames.length);
+      console.log("Bone names:", boneNames);
+
+      // Setup bone controls if bones exist
+      if (boneNames.length > 0) {
+        // Initialize bone rotations from current bone states
+        boneNames.forEach((boneName) => {
+          const bone = skierBones[boneName];
+          if (bone) {
+            const euler = new THREE.Euler().setFromQuaternion(
+              bone.quaternion
+            );
+            boneParams[boneName] = {
+              x: euler.x,
+              y: euler.y,
+              z: euler.z,
+            };
+          }
+        });
+        setupBoneControls(boneNames);
+
+        // Apply skiing pose automatically on load
+        applySkiingPose();
+      } else {
+        console.log("No bones found - model may not be rigged");
+      }
+
+      playerGroup.add(skierModel);
+
+      // Setup animations if present
+      if (gltf.animations && gltf.animations.length > 0) {
+        mixer = new THREE.AnimationMixer(skierModel);
+
+        // Log available animations
+        console.log(
+          "Available animations:",
+          gltf.animations.map((a) => a.name)
+        );
+
+        // Play the first animation by default (usually idle or ski)
+        const action = mixer.clipAction(gltf.animations[0]);
+        action.play();
+      }
+
+      console.log("Skier model loaded! Size:", size);
+      updateSkierDisplay();
+      assetLoadingState.skier = true;
+      updateLoadingProgress();
+      checkAllAssetsLoaded();
+    },
+    (progress) => {
+      console.log(
+        "Loading skier:",
+        ((progress.loaded / progress.total) * 100).toFixed(1) + "%"
+      );
+      updateLoadingProgress();
+    },
+    (error) => {
+      console.error("Error loading skier model:", error);
+      // Fallback to procedural skier if model fails to load
+      createFallbackPlayer();
+      assetLoadingState.skier = true;
+      updateLoadingProgress();
+      checkAllAssetsLoaded();
+    }
+  );
+}
+
+// Fallback procedural player in case GLB fails to load
+function createFallbackPlayer() {
+  const skinMat = new THREE.MeshLambertMaterial({ color: 0xffccaa });
+  const suitMat = new THREE.MeshLambertMaterial({ color: 0xe67e22 });
+  const skiMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+
+  const enableShadows = !isMobile();
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5, 0.3, 1.5, 8),
+    suitMat
+  );
+  body.position.y = 0.75;
+  body.castShadow = enableShadows;
+  playerGroup.add(body);
+
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.4, 16, 16),
+    skinMat
+  );
+  head.position.y = 1.7;
+  head.castShadow = enableShadows;
+  playerGroup.add(head);
+
+  const skiGeo = new THREE.BoxGeometry(0.3, 0.1, 2.5);
+  const skiL = new THREE.Mesh(skiGeo, skiMat);
+  skiL.position.set(-0.4, 0.05, 0);
+  skiL.castShadow = enableShadows;
+  playerGroup.add(skiL);
+
+  const skiR = new THREE.Mesh(skiGeo, skiMat);
+  skiR.position.set(0.4, 0.05, 0);
+  skiR.castShadow = enableShadows;
+  playerGroup.add(skiR);
+}
+
+function placeOnSphere(obj, angleRad, xOffset) {
+  const R = CONFIG.worldRadius;
+  const y = R * Math.cos(angleRad);
+  const z = R * Math.sin(angleRad);
+
+  obj.position.set(xOffset, y, z);
+  obj.rotation.x = angleRad;
+
+  worldSphere.add(obj);
+}
+
+// --- ASSETS ---
+let treeModelTemplate = null;
+let rockModelTemplate = null;
+let redSignModelTemplate = null;
+let blueSignModelTemplate = null;
+let fenceModelTemplate = null;
+let giftModelTemplate = null;
+
+function loadTreeModel() {
+  const loader = new THREE.GLTFLoader();
+  loader.load(
+    "assets/models/alpine_tree_v1.glb",
+    (gltf) => {
+      treeModelTemplate = gltf.scene;
+      console.log("Alpine tree model loaded successfully");
+      // Spawn initial trees after model is loaded
+      spawnInitialTrees();
+      assetLoadingState.tree = true;
+      updateLoadingProgress();
+      checkAllAssetsLoaded();
+    },
+    (xhr) => {
+      console.log(
+        `Loading tree: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`
+      );
+      updateLoadingProgress();
+    },
+    (error) => {
+      console.error("Error loading alpine tree model:", error);
+      // Still spawn trees even if loading fails (will use fallback)
+      spawnInitialTrees();
+      assetLoadingState.tree = true;
+      updateLoadingProgress();
+      checkAllAssetsLoaded();
+    }
+  );
+}
+
+function loadRockModel() {
+  const loader = new THREE.GLTFLoader();
+  loader.load(
+    "assets/models/rock_v1.glb",
+    (gltf) => {
+      rockModelTemplate = gltf.scene;
+      console.log("Rock model loaded successfully");
+      assetLoadingState.rock = true;
+      updateLoadingProgress();
+      checkAllAssetsLoaded();
+    },
+    (xhr) => {
+      console.log(
+        `Loading rock: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`
+      );
+      updateLoadingProgress();
+    },
+    (error) => {
+      console.error("Error loading rock model:", error);
+      assetLoadingState.rock = true;
+      updateLoadingProgress();
+      checkAllAssetsLoaded();
+    }
+  );
+}
+
+function loadSignModel() {
+  const loader = new THREE.GLTFLoader();
+
+  // Load red sign
+  loader.load(
+    "assets/models/red_sign_v1.glb",
+    (gltf) => {
+      redSignModelTemplate = gltf.scene;
+      console.log("Red sign model loaded successfully");
+      assetLoadingState.redSign = true;
+      updateLoadingProgress();
+      checkAllAssetsLoaded();
+    },
+    (xhr) => {
+      console.log(
+        `Loading red sign: ${((xhr.loaded / xhr.total) * 100).toFixed(
+          1
+        )}%`
+      );
+      updateLoadingProgress();
+    },
+    (error) => {
+      console.error("Error loading red sign model:", error);
+      assetLoadingState.redSign = true;
+      updateLoadingProgress();
+      checkAllAssetsLoaded();
+    }
+  );
+
+  // Load blue sign
+  loader.load(
+    "assets/models/blue_sign_v1.glb",
+    (gltf) => {
+      blueSignModelTemplate = gltf.scene;
+      console.log("Blue sign model loaded successfully");
+      assetLoadingState.blueSign = true;
+      updateLoadingProgress();
+      checkAllAssetsLoaded();
+    },
+    (xhr) => {
+      console.log(
+        `Loading blue sign: ${((xhr.loaded / xhr.total) * 100).toFixed(
+          1
+        )}%`
+      );
+      updateLoadingProgress();
+    },
+    (error) => {
+      console.error("Error loading blue sign model:", error);
+      assetLoadingState.blueSign = true;
+      updateLoadingProgress();
+      checkAllAssetsLoaded();
+    }
+  );
+}
+
+function loadFenceModel() {
+  const loader = new THREE.GLTFLoader();
+  loader.load(
+    "assets/models/wooden_fence_v1.glb",
+    (gltf) => {
+      fenceModelTemplate = gltf.scene;
+      console.log("Wooden fence model loaded successfully");
+      assetLoadingState.fence = true;
+      updateLoadingProgress();
+      checkAllAssetsLoaded();
+    },
+    (xhr) => {
+      console.log(
+        `Loading fence: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`
+      );
+      updateLoadingProgress();
+    },
+    (error) => {
+      console.error("Error loading fence model:", error);
+      assetLoadingState.fence = true;
+      updateLoadingProgress();
+      checkAllAssetsLoaded();
+    }
+  );
+}
+
+function loadGiftModel() {
+  const loader = new THREE.GLTFLoader();
+  loader.load(
+    "assets/models/gift_v1.glb",
+    (gltf) => {
+      giftModelTemplate = gltf.scene;
+      console.log("Gift model loaded successfully");
+      assetLoadingState.gift = true;
+      updateLoadingProgress();
+      checkAllAssetsLoaded();
+    },
+    (xhr) => {
+      console.log(
+        `Loading gift: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`
+      );
+      updateLoadingProgress();
+    },
+    (error) => {
+      console.error("Error loading gift model:", error);
+      assetLoadingState.gift = true;
+      updateLoadingProgress();
+      checkAllAssetsLoaded();
+    }
+  );
+}
+
+function spawnInitialTrees() {
+  // Initial Objects
+  // Spawn ahead of player so they are visible immediately
+  for (let i = 0; i < 30; i++) {
+    // Spawn angle: 0.5 down to -1.0 (covering visible range)
+    let angle = 0.5 - i * 0.05;
+    spawnTree(angle, true);
+    spawnBoundary(angle);
+  }
+}
+
+function createTree(isDecoration = false) {
+  if (!treeModelTemplate) {
+    // Model not loaded yet - return null to skip spawning
+    console.warn("Tree model not loaded yet, skipping tree creation");
+    return null;
+  }
+
+  // Clone the GLB model
+  const tree = treeModelTemplate.clone();
+
+  // Enable shadows on all meshes (disable on mobile for performance)
+  const enableShadows = !isMobile();
+  tree.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = enableShadows;
+      child.receiveShadow = enableShadows;
+    }
+  });
+
+  // Randomize scale - slight variation
+  const baseScale = isDecoration ? 5.0 : 8.0;
+  const scaleVariation = 0.8 + Math.random() * 0.5;
+  const scale = baseScale * scaleVariation;
+  tree.scale.set(scale, scale, scale);
+
+  // Randomize Y rotation significantly for variety
+  const randomYRotation = Math.random() * Math.PI * 2; // 0 to 360 degrees
+  tree.rotation.y = randomYRotation;
+
+  return tree;
+}
+
+function spawnTree(angle, isDecoration = false, laneIndex = 0) {
+  const tree = createTree(isDecoration);
+
+  // Skip if model not loaded yet
+  if (!tree) return;
+
+  let xPos;
+  if (isDecoration) {
+    const side = Math.random() > 0.5 ? 1 : -1;
+    xPos = side * (10 + Math.random() * 15);
+  } else {
+    const lane = laneIndex - 1;
+    xPos = lane * CONFIG.laneWidth;
+  }
+
+  placeOnSphere(tree, angle, xPos);
+
+  // Apply vertical offset for playing trees only (not decoration trees)
+  // Offset is applied along the sphere's surface normal (not world Y)
+  // Adjust CONFIG.treeVerticalOffset to control height
+  if (!isDecoration && CONFIG.treeVerticalOffset !== 0) {
+    // Calculate sphere surface normal at this angle
+    const R = CONFIG.worldRadius;
+    const normalY = Math.cos(angle);
+    const normalZ = Math.sin(angle);
+    // Move along the normal by the offset amount
+    tree.position.y += CONFIG.treeVerticalOffset * normalY;
+    tree.position.z += CONFIG.treeVerticalOffset * normalZ;
+  }
+
+  activeObstacles.push({ mesh: tree, angle: angle });
+}
+
+function createRock() {
+  if (!rockModelTemplate) {
+    // Model not loaded yet - return null to skip spawning
+    console.warn("Rock model not loaded yet, skipping rock creation");
+    return null;
+  }
+
+  // Clone the GLB model
+  const rock = rockModelTemplate.clone();
+
+  // Enable shadows on all meshes (disable on mobile for performance)
+  const enableShadows = !isMobile();
+  rock.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = enableShadows;
+      child.receiveShadow = enableShadows;
+    }
+  });
+
+  // Randomize scale - small variation (rocks should be smaller than trees)
+  const baseScale = 3.0; // Smaller than trees (trees are 5.0-8.0)
+  const scaleVariation = 0.6 + Math.random() * 0.4; // 0.6 to 1.0 variation
+  const scale = baseScale * scaleVariation;
+  rock.scale.set(scale, scale, scale);
+
+  // Randomize Y rotation significantly for variety (big variation)
+  const randomYRotation = Math.random() * Math.PI * 2; // 0 to 360 degrees
+  rock.rotation.y = randomYRotation;
+
+  // Also randomize X and Z rotation for more natural look
+  rock.rotation.x = (Math.random() - 0.5) * 0.3; // Small tilt
+  rock.rotation.z = (Math.random() - 0.5) * 0.3; // Small tilt
+
+  return rock;
+}
+
+function spawnBarrier(angle, laneIndex) {
+  const rock = createRock();
+
+  // Skip if model not loaded yet
+  if (!rock) return;
+
+  const lane = laneIndex - 1;
+  const xPos = lane * CONFIG.laneWidth;
+
+  placeOnSphere(rock, angle, xPos);
+  activeBarriers.push({ mesh: rock, angle: angle, passed: false });
+}
+
+// --- NEW: BOUNDARY DECORATIONS (Flags/Fences) ---
+const bFlagPoleGeo = new THREE.CylinderGeometry(0.1, 0.1, 2.5, 8);
+const bFlagCanvasGeo = new THREE.PlaneGeometry(1.2, 0.8);
+const bFlagRedMat = new THREE.MeshLambertMaterial({
+  color: 0xe74c3c,
+  side: THREE.DoubleSide,
+});
+const bFlagBlueMat = new THREE.MeshLambertMaterial({
+  color: 0x3498db,
+  side: THREE.DoubleSide,
+});
+const bFenceGeo = new THREE.BoxGeometry(3, 1.5, 0.2);
+const bFenceMat = new THREE.MeshLambertMaterial({ color: 0x8d6e63 });
+
+function spawnBoundary(angle) {
+  boundaryAlternator++;
+  const isFence = boundaryAlternator % 4 === 0;
+
+  const leftObj = createBoundaryObject(isFence, true);
+  placeOnSphere(leftObj, angle, -9);
+  // Adjust fence Y position (can be modified here)
+  if (isFence) {
+    leftObj.position.y += 0; // Adjust this value to raise/lower the fence
+  }
+  activeBoundaries.push({ mesh: leftObj });
+
+  const rightObj = createBoundaryObject(isFence, false);
+  placeOnSphere(rightObj, angle, 9);
+  // Adjust fence Y position (can be modified here)
+  if (isFence) {
+    rightObj.position.y += 0; // Adjust this value to raise/lower the fence
+  }
+  activeBoundaries.push({ mesh: rightObj });
+}
+
+function createSign() {
+  // Randomly choose between red and blue sign
+  const useRed = Math.random() > 0.5;
+  const signTemplate = useRed
+    ? redSignModelTemplate
+    : blueSignModelTemplate;
+
+  if (!signTemplate) {
+    // Model not loaded yet - return null to skip spawning
+    console.warn("Sign model not loaded yet, skipping sign creation");
+    return null;
+  }
+
+  // Clone the GLB model
+  const sign = signTemplate.clone();
+
+  // Enable shadows on all meshes (disable on mobile for performance)
+  const enableShadows = !isMobile();
+  sign.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = enableShadows;
+      child.receiveShadow = enableShadows;
+    }
+  });
+
+  // Scale up the sign
+  const scale = 2.5;
+  sign.scale.set(scale, scale, scale);
+
+  // Raise the sign so it's flush with the ground (not buried)
+  // Adjust Y position based on scale to keep it at ground level
+  sign.position.y += 0.5; // Adjust this value to position sign correctly
+
+  // Randomize Y rotation a bit
+  const randomYRotation = (Math.random() - 0.5) * 0.4; // -0.2 to 0.2 radians (~-11 to 11 degrees)
+  sign.rotation.y = randomYRotation;
+
+  return sign;
+}
+
+function createFence() {
+  if (!fenceModelTemplate) {
+    // Model not loaded yet - return null to skip spawning
+    console.warn("Fence model not loaded yet, skipping fence creation");
+    return null;
+  }
+
+  // Clone the GLB model
+  const fence = fenceModelTemplate.clone();
+
+  // Enable shadows on all meshes (disable on mobile for performance)
+  const enableShadows = !isMobile();
+  fence.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = enableShadows;
+      child.receiveShadow = enableShadows;
+    }
+  });
+
+  // Scale up the fence
+  const scale = 5.5;
+  fence.scale.set(scale, scale, scale);
+
+  return fence;
+}
+
+function createBoundaryObject(isFence, isLeft) {
+  const group = new THREE.Group();
+
+  if (isFence) {
+    // Use wooden fence model instead of procedural fence
+    const fence = createFence();
+    if (fence) {
+      // Adjust fence Y position (can be modified here)
+      fence.position.y = 0.5; // Adjust this value to raise/lower the fence
+      group.add(fence);
+    } else {
+      // Fallback to procedural fence if model not loaded
+      const proceduralFence = new THREE.Mesh(bFenceGeo, bFenceMat);
+      proceduralFence.position.y = 0.75;
+      proceduralFence.rotation.y = Math.PI / 2;
+      proceduralFence.castShadow = true;
+      group.add(proceduralFence);
+    }
+  } else {
+    // Use red sign model instead of flags
+    const sign = createSign();
+    if (sign) {
+      group.add(sign);
+    } else {
+      // Fallback to flag if model not loaded
+      const pole = new THREE.Mesh(
+        bFlagPoleGeo,
+        new THREE.MeshLambertMaterial({ color: 0x777777 })
+      );
+      pole.position.y = 1.25;
+      pole.castShadow = true;
+      group.add(pole);
+
+      const flag = new THREE.Mesh(bFlagCanvasGeo, bFlagRedMat);
+      flag.position.y = 1.8;
+      flag.position.x = isLeft ? 0.6 : -0.6;
+      group.add(flag);
+    }
+  }
+  return group;
+}
+
+// --- SPAWN LOGIC ---
+function spawnRow(angle) {
+  const rand = Math.random();
+  const lanes = [0, 1, 2];
+  lanes.sort(() => Math.random() - 0.5);
+
+  // Ensure at least one lane is always clear (max 2 obstacles per row)
+  if (rand < 0.4) {
+    // 40% chance: 1 tree
+    spawnTree(angle, false, lanes[0]);
+  } else if (rand < 0.65) {
+    // 25% chance: 2 trees (leaves 1 lane clear)
+    spawnTree(angle, false, lanes[0]);
+    spawnTree(angle, false, lanes[1]);
+  } else if (rand < 0.8) {
+    // 15% chance: 1 barrier
+    spawnBarrier(angle, lanes[0]);
+  } else {
+    // 20% chance: 1 tree + 1 barrier (in different lanes, leaves 1 lane clear)
+    spawnTree(angle, false, lanes[0]);
+    spawnBarrier(angle, lanes[1]);
+  }
+  // Always spawn a decoration tree further out (not in lanes)
+  spawnTree(angle, true);
+}
+
+function createGift() {
+  if (!giftModelTemplate) {
+    console.warn("Gift model not loaded yet, skipping gift creation");
+    return null;
+  }
+
+  // Clone the GLB model
+  const gift = giftModelTemplate.clone();
+
+  // Enable shadows on all meshes (disable on mobile for performance)
+  const enableShadows = !isMobile();
+  gift.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = enableShadows;
+      child.receiveShadow = enableShadows;
+    }
+  });
+
+  // Set scale for gift
+  const scale = 2.0;
+  gift.scale.set(scale, scale, scale);
+
+  return gift;
+}
+
+function spawnGift(angle) {
+  // Don't spawn if gift already collected or already exists
+  if (giftCollected || activeGift) return;
+
+  const gift = createGift();
+  if (!gift) return;
+
+  // Find a free lane (lane with no obstacles)
+  const occupiedLanes = new Set();
+
+  // Check obstacles at this angle
+  activeObstacles.forEach((obj) => {
+    const oPos = new THREE.Vector3();
+    obj.mesh.getWorldPosition(oPos);
+    // Check if obstacle is near this angle
+    const angleDiff = Math.abs(obj.angle - angle);
+    if (angleDiff < 0.1) {
+      // Determine which lane this obstacle is in
+      const lane = Math.round(oPos.x / CONFIG.laneWidth);
+      if (lane >= -1 && lane <= 1) {
+        occupiedLanes.add(lane);
+      }
+    }
+  });
+
+  // Check barriers at this angle
+  activeBarriers.forEach((obj) => {
+    const oPos = new THREE.Vector3();
+    obj.mesh.getWorldPosition(oPos);
+    const angleDiff = Math.abs(obj.angle - angle);
+    if (angleDiff < 0.1) {
+      const lane = Math.round(oPos.x / CONFIG.laneWidth);
+      if (lane >= -1 && lane <= 1) {
+        occupiedLanes.add(lane);
+      }
+    }
+  });
+
+  // Find a free lane
+  const freeLanes = [-1, 0, 1].filter((lane) => !occupiedLanes.has(lane));
+  if (freeLanes.length === 0) {
+    // No free lanes, don't spawn gift
+    return;
+  }
+
+  // Pick a random free lane
+  const selectedLane =
+    freeLanes[Math.floor(Math.random() * freeLanes.length)];
+  const xPos = selectedLane * CONFIG.laneWidth;
+
+  placeOnSphere(gift, angle, xPos);
+
+  // Position gift slightly above ground for floating effect
+  // Use the same sphere surface normal system as trees/rocks
+  const R = CONFIG.worldRadius;
+  const normalY = Math.cos(angle);
+  const normalZ = Math.sin(angle);
+  // Move along the normal by the offset amount (using same offset as trees)
+  gift.position.y += CONFIG.giftVerticalOffset * normalY;
+  gift.position.z += CONFIG.giftVerticalOffset * normalZ;
+
+  // Store gift with floating animation data
+  activeGift = {
+    mesh: gift,
+    angle: angle,
+    floatOffset: 0,
+    floatSpeed: 1.5 + Math.random() * 0.5, // Random float speed
+    baseY: gift.position.y,
+  };
+}
+
+function updateGiftAnimation(deltaTime) {
+  if (!activeGift || !gameActive || isPaused) return;
+
+  // Update floating animation
+  activeGift.floatOffset += deltaTime * activeGift.floatSpeed;
+  const floatAmount = Math.sin(activeGift.floatOffset) * 0.5; // Float up and down
+  activeGift.mesh.position.y = activeGift.baseY + floatAmount;
+
+  // Rotate gift slowly
+  activeGift.mesh.rotation.y += deltaTime * 0.5;
+}
+
+function updateSubtleAnimations(deltaTime) {
+  animationTime += deltaTime * animationSpeed;
+
+  // Pelvis - slower, smoother sway (only if not turning)
+  if (
+    boneParams.Pelvis &&
+    skierBones.Pelvis &&
+    !isRightTurning &&
+    !isLeftTurning
+  ) {
+    const offset =
+      Math.sin(animationTime * 0.8) * animationParams.pelvis.amplitude;
+    boneParams.Pelvis.y = animationParams.pelvis.baseY + offset;
+    updateBoneRotation("Pelvis");
+  }
+
+  // Waist - slightly faster, counter to pelvis
+  if (boneParams.Waist && skierBones.Waist) {
+    const offset =
+      Math.sin(animationTime * 1.2 + Math.PI * 0.3) *
+      animationParams.waist.amplitude;
+    boneParams.Waist.y = animationParams.waist.baseY + offset;
+    updateBoneRotation("Waist");
+  }
+
+  // Head - faster, subtle movement (only if not turning)
+  if (
+    boneParams.Head &&
+    skierBones.Head &&
+    !isRightTurning &&
+    !isLeftTurning
+  ) {
+    const offset =
+      Math.sin(animationTime * 1.5 + Math.PI * 0.5) *
+      animationParams.head.amplitude;
+    boneParams.Head.y = animationParams.head.baseY + offset;
+    updateBoneRotation("Head");
+  }
+}
+
+// Frame rate limiting for mobile
+let lastFrameTime = 0;
+const targetFPS = isMobile() ? 30 : 60; // 30 FPS on mobile, 60 on desktop
+const frameInterval = 1000 / targetFPS;
+
+function animate(currentTime) {
+  requestAnimationFrame(animate);
+
+  // Frame rate limiting for mobile
+  const elapsed = currentTime - lastFrameTime;
+  if (elapsed < frameInterval) {
+    return; // Skip frame to maintain target FPS
+  }
+  lastFrameTime = currentTime - (elapsed % frameInterval);
+
+  // Update animation mixer (only if not paused)
+  const delta = clock.getDelta();
+  if (!isPaused && mixer) {
+    mixer.update(delta);
+  }
+
+  // Update subtle bone animations (only if not paused)
+  if (!isPaused) {
+    updateSubtleAnimations(delta);
+  }
+
+  // Update jump animation (only if not paused)
+  if (!isPaused) {
+    updateJumpAnimation(delta);
+  }
+
+  // Update crash animation (only if not paused)
+  if (!isPaused) {
+    updateCrashAnimation(delta);
+  }
+
+  // Update turn animations (only if not paused)
+  if (!isPaused) {
+    updateRightTurnAnimation(delta);
+    updateLeftTurnAnimation(delta);
+    updateGiftAnimation(delta);
+  }
+
+  // World rotation (only if not paused)
+  if (!isPaused) {
+    worldSphere.rotation.x -= currentRotationSpeed;
+  }
+  const totalRotation = -worldSphere.rotation.x;
+
+  if (gameActive && !isPaused) update();
+
+  // Skier roll away animation when game over (outside update so it continues)
+  if (isGameOver) {
+    skierRollAwayRotation += 0.05;
+    playerGroup.rotation.x += 0.02;
+    playerGroup.rotation.z += 0.03;
+    playerGroup.position.y -= 0.1;
+    // Rotate skier away
+    player.rotation.x += 0.05;
+    player.rotation.z += 0.08;
+  }
+
+  renderer.render(scene, camera);
+}
+
+function update() {
+  // Gradually increase speed over time (very slight acceleration)
+  if (currentRotationSpeed < CONFIG.maxSpeed) {
+    currentRotationSpeed += CONFIG.accelerationRate;
+    if (currentRotationSpeed > CONFIG.maxSpeed) {
+      currentRotationSpeed = CONFIG.maxSpeed;
+    }
+  }
+
+  const dx = targetX - player.position.x;
+  player.position.x += dx * CONFIG.turnSpeed;
+
+  if (isJumping) {
+    verticalVelocity -= CONFIG.gravity;
+    playerHeight += verticalVelocity;
+
+    if (playerHeight <= 0) {
+      playerHeight = 0;
+      isJumping = false;
+      verticalVelocity = 0;
+
+      // Resume ambient sound when jump ends
+      startAmbientSound();
+    }
+  }
+  player.position.y = CONFIG.worldRadius + playerHeight;
+
+  const leanAmount = isJumping ? 0.05 : 0.15;
+  player.rotation.z = -dx * leanAmount;
+  if (isJumping) player.rotation.x = -0.5;
+  else player.rotation.x = 0;
+
+  // Get total rotation from world sphere (already updated in animate loop)
+  const totalRotation = -worldSphere.rotation.x;
+
+  // Only update score if game is active
+  if (gameActive) {
+    score += currentRotationSpeed * 100;
+    document.getElementById("score").innerText = Math.floor(score);
+  }
+
+  // Only check collisions if game is active
+  if (gameActive) {
+    checkCollisions();
+  }
+
+  // Spawn Obstacles (only if game is active and not paused)
+  // Note: totalRotation is now calculated in animate loop, so we need to recalculate here
+  const totalRotationForSpawn = -worldSphere.rotation.x;
+  if (
+    gameActive &&
+    !isPaused &&
+    totalRotationForSpawn - lastSpawnRotation > CONFIG.spawnInterval
+  ) {
+    // FIXED SPAWN ANGLE: 0.5 is closer to camera than 1.5.
+    // 1.5 was spawning behind the new cleanup threshold.
+    const spawnAngle = -worldSphere.rotation.x + 0.5;
+    spawnRow(spawnAngle);
+    lastSpawnRotation = totalRotationForSpawn;
+  }
+
+  // Spawn Boundaries (only if game is active and not paused)
+  if (
+    gameActive &&
+    !isPaused &&
+    totalRotationForSpawn - lastBoundaryRotation > CONFIG.boundaryInterval
+  ) {
+    const bAngle = -worldSphere.rotation.x + 0.5;
+    spawnBoundary(bAngle);
+    lastBoundaryRotation = totalRotationForSpawn;
+  }
+
+  // Spawn Gift (only if game is active, not paused, gift not collected)
+  // Desktop: first gift at 1500m, then every 250m after that
+  // Mobile: first gift at 1000m, then every 200m after that
+  const isMobileDevice = isMobile();
+  const firstGiftDistance = isMobileDevice ? 1000 : 1500;
+  const giftInterval = isMobileDevice ? 200 : 250;
+
+  if (
+    gameActive &&
+    !isPaused &&
+    !giftCollected &&
+    !activeGift &&
+    score >= firstGiftDistance
+  ) {
+    const currentIntervalMark = Math.floor(
+      (score - firstGiftDistance) / giftInterval
+    );
+    const lastIntervalMark = Math.floor(
+      (lastGiftSpawnDistance - firstGiftDistance) / giftInterval
+    );
+
+    // Spawn gift when crossing into a new interval mark
+    if (currentIntervalMark > lastIntervalMark) {
+      const giftAngle = -worldSphere.rotation.x + 0.5;
+      spawnGift(giftAngle);
+      lastGiftSpawnDistance = score;
+    }
+  }
+
+  // Cleanup (only if not paused)
+  if (!isPaused) {
+    cleanupObjects();
+  }
+}
+
+function cleanupObjects() {
+  // FIXED CLEANUP: Only remove when they go over horizon (Z < -60)
+  const cleanupList = [activeObstacles, activeBarriers, activeBoundaries];
+
+  cleanupList.forEach((list) => {
+    for (let i = list.length - 1; i >= 0; i--) {
+      const obj = list[i];
+      const oPos = new THREE.Vector3();
+      obj.mesh.getWorldPosition(oPos);
+
+      if (oPos.z < -60) {
+        worldSphere.remove(obj.mesh);
+        list.splice(i, 1);
+      }
+    }
+  });
+
+  // Cleanup gift if it goes over horizon
+  if (activeGift) {
+    const gPos = new THREE.Vector3();
+    activeGift.mesh.getWorldPosition(gPos);
+    if (gPos.z < -60) {
+      worldSphere.remove(activeGift.mesh);
+      activeGift = null;
+    }
+  }
+}
+
+function checkCollisions() {
+  const pPos = new THREE.Vector3();
+  player.getWorldPosition(pPos);
+
+  // Gift collision (non-lethal)
+  if (activeGift && !giftCollected) {
+    const gPos = new THREE.Vector3();
+    activeGift.mesh.getWorldPosition(gPos);
+
+    if (Math.abs(gPos.z - pPos.z) < 1.5) {
+      if (Math.abs(gPos.x - pPos.x) < 1.5) {
+        // Gift collected!
+        playSound("twinkle");
+        giftCollected = true;
+
+        // Remove gift from scene
+        worldSphere.remove(activeGift.mesh);
+        activeGift = null;
+
+        return; // Don't check other collisions this frame
+      }
+    }
+  }
+
+  // Trees
+  for (let i = activeObstacles.length - 1; i >= 0; i--) {
+    const obj = activeObstacles[i];
+    const oPos = new THREE.Vector3();
+    obj.mesh.getWorldPosition(oPos);
+
+    if (Math.abs(oPos.z - pPos.z) < 1.5) {
+      if (Math.abs(oPos.x - pPos.x) < 1.5) {
+        triggerCrash();
+      }
+    }
+  }
+
+  // Barriers
+  for (let i = activeBarriers.length - 1; i >= 0; i--) {
+    const obj = activeBarriers[i];
+    const oPos = new THREE.Vector3();
+    obj.mesh.getWorldPosition(oPos);
+
+    if (!obj.passed && Math.abs(oPos.z - pPos.z) < 1.0) {
+      if (Math.abs(oPos.x - pPos.x) < 2.0) {
+        // Easier to jump over: > 1.0 height required
+        if (playerHeight > 1.0) {
+          obj.passed = true;
+          showJumpMsg();
+          score += 500;
+        } else {
+          triggerCrash();
+        }
+      }
+    }
+  }
+}
+
+function triggerCrash() {
+  if (isGameOver || crashCooldown) return; // Don't process crashes if game is already over or in cooldown
+
+  // Clear any existing cooldown timeout
+  if (crashCooldownTimeout) {
+    clearTimeout(crashCooldownTimeout);
+    crashCooldownTimeout = null;
+  }
+
+  // Set cooldown to prevent multiple crashes
+  crashCooldown = true;
+  crashCooldownTimeout = setTimeout(() => {
+    crashCooldown = false;
+    crashCooldownTimeout = null;
+  }, 1000); // 1 second cooldown
+
+  // Decrement lives
+  lives--;
+  updateLivesDisplay();
+
+  const overlay = document.getElementById("crash-overlay");
+  overlay.style.opacity = 0.5;
+  setTimeout(() => {
+    overlay.style.opacity = 0;
+  }, 100);
+
+  // Start crash animation
+  startCrashAnimation();
+
+  // Play crash sound: ouch_3
+  playSound("ouch3");
+
+  // Check if game over
+  if (lives <= 0) {
+    gameOver();
+  }
+}
+
+function gameOver() {
+  isGameOver = true;
+  gameActive = false;
+
+  // Pause ambient ski noise
+  stopAmbientSound();
+
+  // Play game over sound
+  playSound("ohNo");
+
+  // Save high score
+  saveHighScore();
+
+  // Show game over screen
+  const gameOverScreen = document.getElementById("game-over-screen");
+  const finalScoreValue = document.getElementById("final-score-value");
+  const claimGiftButton = document.getElementById("claim-gift-button");
+
+  if (gameOverScreen && finalScoreValue) {
+    finalScoreValue.textContent = Math.floor(score);
+    gameOverScreen.classList.add("visible");
+
+    // Show claim gift button only if gift was collected
+    if (claimGiftButton && giftCollected) {
+      claimGiftButton.style.display = "inline-block";
+    } else if (claimGiftButton) {
+      claimGiftButton.style.display = "none";
+    }
+  }
+}
+
+function togglePause() {
+  if (isGameOver) return; // Can't pause when game is over
+
+  isPaused = !isPaused;
+  const pauseButton = document.getElementById("pause-button");
+  if (pauseButton) {
+    if (isPaused) {
+      pauseButton.textContent = "▶️";
+      pauseButton.title = "Resume";
+      // Pause ambient sound
+      if (ambientSound && !ambientSound.paused) {
+        ambientSound.pause();
+      }
+      // Pause background music
+      if (backgroundMusic && !backgroundMusic.paused) {
+        backgroundMusic.pause();
+      }
+    } else {
+      pauseButton.textContent = "⏸️";
+      pauseButton.title = "Pause";
+      // Resume ambient sound if enabled
+      startAmbientSound();
+      // Resume background music if music enabled
+      if (backgroundMusic && musicEnabled) {
+        backgroundMusic.play().catch((err) => {
+          console.log("Music resume failed:", err);
+        });
+      }
+    }
+  }
+}
+
+function restartGame() {
+  // Reset game state
+  lives = 3;
+  score = 0;
+  isGameOver = false;
+  gameActive = true;
+  isPaused = false;
+  skierRollAwayRotation = 0;
+
+  // Reset pause button
+  const pauseButton = document.getElementById("pause-button");
+  if (pauseButton) {
+    pauseButton.textContent = "⏸️";
+    pauseButton.title = "Pause";
+  }
+
+  // Reset player position and rotation
+  player.position.x = 0;
+  player.position.y = CONFIG.worldRadius;
+  player.rotation.x = 0;
+  player.rotation.y = Math.PI;
+  player.rotation.z = 0;
+  playerGroup.rotation.x = 0;
+  playerGroup.rotation.y = 0;
+  playerGroup.rotation.z = 0;
+
+  // Reset skier bones to skiing pose
+  applySkiingPose();
+
+  // Reset jump state
+  isJumping = false;
+  verticalVelocity = 0;
+  playerHeight = 0;
+
+  // Reset crash state
+  isCrashing = false;
+  crashTime = 0;
+  crashCooldown = false;
+  // Clear any pending crash cooldown timeout
+  if (crashCooldownTimeout) {
+    clearTimeout(crashCooldownTimeout);
+    crashCooldownTimeout = null;
+  }
+
+  // Reset turn states
+  isRightTurning = false;
+  isLeftTurning = false;
+  rightTurnTime = 0;
+  leftTurnTime = 0;
+
+  // Reset lane
+  currentLane = 0;
+  targetX = 0;
+
+  // Reset world rotation and speed
+  worldSphere.rotation.x = 0;
+  currentRotationSpeed = CONFIG.baseSpeed;
+  lastSpawnRotation = 0;
+  lastBoundaryRotation = 0;
+
+  // Reset animation time
+  animationTime = 0;
+  jumpAnimationTime = 0;
+  crashTime = 0;
+  rightTurnTime = 0;
+  leftTurnTime = 0;
+
+  // Clear obstacles - remove from worldSphere (they're children of worldSphere)
+  activeObstacles.forEach((obj) => {
+    if (obj.mesh && obj.mesh.parent) {
+      obj.mesh.parent.remove(obj.mesh);
+    }
+  });
+  activeObstacles = [];
+
+  activeBarriers.forEach((obj) => {
+    if (obj.mesh && obj.mesh.parent) {
+      obj.mesh.parent.remove(obj.mesh);
+    }
+  });
+  activeBarriers = [];
+
+  activeBoundaries.forEach((obj) => {
+    if (obj.mesh && obj.mesh.parent) {
+      obj.mesh.parent.remove(obj.mesh);
+    }
+  });
+  activeBoundaries = [];
+
+  // Reset score display
+  document.getElementById("score").innerText = "0";
+  updateLivesDisplay();
+  updateHighScoreDisplay();
+
+  // Hide game over screen
+  const gameOverScreen = document.getElementById("game-over-screen");
+  const claimGiftButton = document.getElementById("claim-gift-button");
+  if (gameOverScreen) {
+    gameOverScreen.classList.remove("visible");
+  }
+  // Hide claim gift button on restart
+  if (claimGiftButton) {
+    claimGiftButton.style.display = "none";
+  }
+
+  // Resume ambient sound if enabled
+  startAmbientSound();
+
+  // Reset gift state
+  if (activeGift) {
+    worldSphere.remove(activeGift.mesh);
+  }
+  activeGift = null;
+  giftCollected = false;
+  lastGiftSpawnDistance = 0;
+
+  // Spawn initial trees and boundaries for new game
+  spawnInitialTrees();
+}
+
+function startCrashAnimation() {
+  if (!boneParams.L_Thigh || !boneParams.R_Thigh || !boneParams.Head)
+    return;
+
+  // If crashing during a jump, reset jump animation state first
+  if (isJumping) {
+    isJumping = false;
+    verticalVelocity = 0;
+    playerHeight = 0;
+    // Reset jump animation bones to skiing pose values
+    if (boneParams.L_Upperarm) {
+      boneParams.L_Upperarm.z = -1.03; // From skiing pose
+      updateBoneRotation("L_Upperarm");
+    }
+    if (boneParams.R_Upperarm) {
+      boneParams.R_Upperarm.z = 0.88; // From skiing pose
+      updateBoneRotation("R_Upperarm");
+    }
+    if (boneParams.L_Thigh) {
+      boneParams.L_Thigh.y = 0.01; // From skiing pose
+      updateBoneRotation("L_Thigh");
+    }
+    if (boneParams.R_Thigh) {
+      boneParams.R_Thigh.y = 0.03; // From skiing pose
+      updateBoneRotation("R_Thigh");
+    }
+    // Reset jump base values to skiing pose
+    lUpperarmBaseZ = -1.03;
+    rUpperarmBaseZ = 0.88;
+    lThighBaseY = 0.01;
+    rThighBaseY = 0.03;
+    jumpAnimationTime = 0;
+  }
+
+  // Store base values (current position)
+  if (boneParams.Pelvis) crashBaseValues.pelvisZ = boneParams.Pelvis.z;
+  if (boneParams.Hip) {
+    crashBaseValues.hipX = boneParams.Hip.x;
+    crashBaseValues.hipY = boneParams.Hip.y;
+    crashBaseValues.hipZ = boneParams.Hip.z;
+  }
+  crashBaseValues.lThighY = boneParams.L_Thigh.y;
+  crashBaseValues.lThighZ = boneParams.L_Thigh.z;
+  crashBaseValues.rThighY = boneParams.R_Thigh.y;
+  crashBaseValues.rThighZ = boneParams.R_Thigh.z;
+  crashBaseValues.headZ = boneParams.Head.z;
+  if (boneParams.R_Hand) crashBaseValues.rHandY = boneParams.R_Hand.y;
+  if (boneParams.L_Hand) crashBaseValues.lHandY = boneParams.L_Hand.y;
+
+  isCrashing = true;
+  crashTime = 0;
+}
+
+function resetCrashAnimation() {
+  if (!boneParams.L_Thigh || !boneParams.R_Thigh || !boneParams.Head)
+    return;
+
+  // Ensure jump state is reset
+  if (isJumping) {
+    isJumping = false;
+    verticalVelocity = 0;
+    playerHeight = 0;
+  }
+
+  // Reset jump animation base values to skiing pose
+  lUpperarmBaseZ = -1.03;
+  rUpperarmBaseZ = 0.88;
+  lThighBaseY = 0.01;
+  rThighBaseY = 0.03;
+  jumpAnimationTime = 0;
+
+  // Reset to skiing pose values (not crash base values, which may include animation offsets)
+  // Use the same values from applySkiingPose()
+  if (boneParams.Pelvis) {
+    boneParams.Pelvis.z = -2.44;
+    updateBoneRotation("Pelvis");
+  }
+
+  if (boneParams.Hip) {
+    boneParams.Hip.x = 0.73;
+    boneParams.Hip.y = -0.83;
+    boneParams.Hip.z = -0.14;
+    updateBoneRotation("Hip");
+  }
+
+  if (boneParams.L_Thigh) {
+    boneParams.L_Thigh.y = 0.01;
+    boneParams.L_Thigh.z = 0.6;
+    updateBoneRotation("L_Thigh");
+  }
+
+  if (boneParams.R_Thigh) {
+    boneParams.R_Thigh.y = 0.03;
+    boneParams.R_Thigh.z = 0.6;
+    updateBoneRotation("R_Thigh");
+  }
+
+  // Reset jump animation bones to skiing pose
+  if (boneParams.L_Upperarm) {
+    boneParams.L_Upperarm.z = -1.03;
+    updateBoneRotation("L_Upperarm");
+  }
+  if (boneParams.R_Upperarm) {
+    boneParams.R_Upperarm.z = 0.88;
+    updateBoneRotation("R_Upperarm");
+  }
+
+  if (boneParams.Head) {
+    boneParams.Head.z = 0;
+    updateBoneRotation("Head");
+  }
+
+  if (boneParams.R_Hand) {
+    boneParams.R_Hand.y = 0.38;
+    updateBoneRotation("R_Hand");
+  }
+
+  if (boneParams.L_Hand) {
+    boneParams.L_Hand.y = 0;
+    updateBoneRotation("L_Hand");
+  }
+
+  isCrashing = false;
+  crashTime = 0;
+}
+
+function updateCrashAnimation(deltaTime) {
+  if (!isCrashing) return;
+
+  crashTime += deltaTime * crashAnimationSpeed;
+  const crashUpDuration = 0.3; // Time to go from base to crash position
+  const crashDownDuration = 0.3; // Time to go from crash back to base
+  const totalDuration = crashUpDuration + crashDownDuration;
+
+  let progress = 0;
+  if (crashTime < crashUpDuration) {
+    const t = crashTime / crashUpDuration;
+    progress = 1 - (1 - t) * (1 - t);
+  } else if (crashTime < totalDuration) {
+    const t = (crashTime - crashUpDuration) / crashDownDuration;
+    progress = 1 - t * t;
+  } else {
+    resetCrashAnimation();
+    return;
+  }
+
+  if (boneParams.Pelvis && skierBones.Pelvis) {
+    boneParams.Pelvis.z =
+      crashBaseValues.pelvisZ +
+      (crashAnimationParams.pelvisZ - crashBaseValues.pelvisZ) * progress;
+    updateBoneRotation("Pelvis");
+  }
+
+  if (boneParams.Hip && skierBones.Hip) {
+    boneParams.Hip.x =
+      crashBaseValues.hipX +
+      (crashAnimationParams.hipX - crashBaseValues.hipX) * progress;
+    boneParams.Hip.y =
+      crashBaseValues.hipY +
+      (crashAnimationParams.hipY - crashBaseValues.hipY) * progress;
+    boneParams.Hip.z =
+      crashBaseValues.hipZ +
+      (crashAnimationParams.hipZ - crashBaseValues.hipZ) * progress;
+    updateBoneRotation("Hip");
+  }
+
+  if (boneParams.L_Thigh && skierBones.L_Thigh) {
+    boneParams.L_Thigh.y =
+      crashBaseValues.lThighY +
+      (crashAnimationParams.lThighY - crashBaseValues.lThighY) * progress;
+    boneParams.L_Thigh.z =
+      crashBaseValues.lThighZ +
+      (crashAnimationParams.lThighZ - crashBaseValues.lThighZ) * progress;
+    updateBoneRotation("L_Thigh");
+  }
+
+  if (boneParams.R_Thigh && skierBones.R_Thigh) {
+    boneParams.R_Thigh.y =
+      crashBaseValues.rThighY +
+      (crashAnimationParams.rThighY - crashBaseValues.rThighY) * progress;
+    boneParams.R_Thigh.z =
+      crashBaseValues.rThighZ +
+      (crashAnimationParams.rThighZ - crashBaseValues.rThighZ) * progress;
+    updateBoneRotation("R_Thigh");
+  }
+
+  if (boneParams.Head && skierBones.Head) {
+    boneParams.Head.z =
+      crashBaseValues.headZ +
+      (crashAnimationParams.headZ - crashBaseValues.headZ) * progress;
+    updateBoneRotation("Head");
+  }
+
+  if (boneParams.R_Hand && skierBones.R_Hand) {
+    boneParams.R_Hand.y =
+      crashBaseValues.rHandY +
+      (crashAnimationParams.rHandY - crashBaseValues.rHandY) * progress;
+    updateBoneRotation("R_Hand");
+  }
+
+  if (boneParams.L_Hand && skierBones.L_Hand) {
+    boneParams.L_Hand.y =
+      crashBaseValues.lHandY +
+      (crashAnimationParams.lHandY - crashBaseValues.lHandY) * progress;
+    updateBoneRotation("L_Hand");
+  }
+}
+
+function showJumpMsg() {
+  const msg = document.getElementById("jump-msg");
+  msg.style.opacity = 1;
+  msg.style.top = "30%";
+  setTimeout(() => {
+    msg.style.opacity = 0;
+    msg.style.top = "40%";
+  }, 500);
+}
+
+function resetGame() {
+  activeObstacles.forEach((o) => worldSphere.remove(o.mesh));
+  activeBarriers.forEach((o) => worldSphere.remove(o.mesh));
+  activeBoundaries.forEach((o) => worldSphere.remove(o.mesh));
+  if (activeGift) {
+    worldSphere.remove(activeGift.mesh);
+  }
+  activeObstacles = [];
+  activeBarriers = [];
+  activeBoundaries = [];
+  activeGift = null;
+  giftCollected = false;
+  lastGiftSpawnDistance = 0;
+
+  player.position.x = 0;
+  targetX = 0;
+  currentLane = 0;
+  score = 0;
+  currentRotationSpeed = CONFIG.baseSpeed;
+  worldSphere.rotation.x = 0;
+  lastSpawnRotation = 0;
+  lastBoundaryRotation = 0;
+
+  for (let i = 0; i < 30; i++) {
+    let angle = 0.5 - i * 0.05;
+    spawnTree(angle, true);
+    spawnBoundary(angle);
+  }
+}
+
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function moveLane(direction) {
+  if (!gameActive || isGameOver || isPaused) return;
+  currentLane += direction;
+  if (currentLane < -1) currentLane = -1;
+  if (currentLane > 1) currentLane = 1;
+  targetX = currentLane * CONFIG.laneWidth;
+
+  // Start turn animation
+  if (direction > 0) {
+    startRightTurn();
+    playSound("rightTurn");
+    playSound("thump");
+  } else if (direction < 0) {
+    startLeftTurn();
+    playSound("leftTurn");
+    playSound("thump");
+  }
+
+  // Initialize audio on first interaction
+  if (typeof initAudioOnInteraction === "function") {
+    initAudioOnInteraction();
+  }
+}
+
+function startRightTurn() {
+  if (!boneParams.Pelvis || !boneParams.Head) return;
+  // Store current values (which include base animation offset)
+  rightTurnBaseValues.pelvisY = boneParams.Pelvis.y;
+  rightTurnBaseValues.headY = boneParams.Head.y;
+  isRightTurning = true;
+  rightTurnTime = 0;
+}
+
+function startLeftTurn() {
+  if (!boneParams.Pelvis || !boneParams.Head) return;
+  // Store current values (which include base animation offset)
+  leftTurnBaseValues.pelvisY = boneParams.Pelvis.y;
+  leftTurnBaseValues.headY = boneParams.Head.y;
+  isLeftTurning = true;
+  leftTurnTime = 0;
+}
+
+function updateRightTurnAnimation(deltaTime) {
+  if (!isRightTurning) return;
+
+  rightTurnTime += deltaTime * rightTurnSpeed;
+  const turnUpDuration = 0.2;
+  const turnDownDuration = 0.2;
+  const totalDuration = turnUpDuration + turnDownDuration;
+
+  let progress = 0;
+  if (rightTurnTime < turnUpDuration) {
+    const t = rightTurnTime / turnUpDuration;
+    progress = 1 - (1 - t) * (1 - t);
+  } else if (rightTurnTime < totalDuration) {
+    const t = (rightTurnTime - turnUpDuration) / turnDownDuration;
+    progress = 1 - t * t;
+  } else {
+    isRightTurning = false;
+    rightTurnTime = 0;
+    return;
+  }
+
+  if (boneParams.Pelvis && skierBones.Pelvis) {
+    // Interpolate from base to turn position
+    boneParams.Pelvis.y =
+      animationParams.pelvis.baseY +
+      (rightTurnParams.pelvisY - animationParams.pelvis.baseY) * progress;
+    updateBoneRotation("Pelvis");
+  }
+
+  if (boneParams.Head && skierBones.Head) {
+    // Interpolate from base to turn position
+    boneParams.Head.y =
+      animationParams.head.baseY +
+      (rightTurnParams.headY - animationParams.head.baseY) * progress;
+    updateBoneRotation("Head");
+  }
+}
+
+function updateLeftTurnAnimation(deltaTime) {
+  if (!isLeftTurning) return;
+
+  leftTurnTime += deltaTime * leftTurnSpeed;
+  const turnUpDuration = 0.2;
+  const turnDownDuration = 0.2;
+  const totalDuration = turnUpDuration + turnDownDuration;
+
+  let progress = 0;
+  if (leftTurnTime < turnUpDuration) {
+    const t = leftTurnTime / turnUpDuration;
+    progress = 1 - (1 - t) * (1 - t);
+  } else if (leftTurnTime < totalDuration) {
+    const t = (leftTurnTime - turnUpDuration) / turnDownDuration;
+    progress = 1 - t * t;
+  } else {
+    isLeftTurning = false;
+    leftTurnTime = 0;
+    return;
+  }
+
+  if (boneParams.Pelvis && skierBones.Pelvis) {
+    // Interpolate from base to turn position
+    boneParams.Pelvis.y =
+      animationParams.pelvis.baseY +
+      (leftTurnParams.pelvisY - animationParams.pelvis.baseY) * progress;
+    updateBoneRotation("Pelvis");
+  }
+
+  if (boneParams.Head && skierBones.Head) {
+    // Interpolate from base to turn position
+    boneParams.Head.y =
+      animationParams.head.baseY +
+      (leftTurnParams.headY - animationParams.head.baseY) * progress;
+    updateBoneRotation("Head");
+  }
+}
+
+function jump() {
+  if (!gameActive || isGameOver || isPaused) return;
+  if (!isJumping) {
+    isJumping = true;
+    verticalVelocity = CONFIG.jumpStrength;
+
+    // Pause ambient sound during jump
+    stopAmbientSound();
+
+    // Start jump animation
+    startJumpAnimation();
+    playSound("jump");
+  }
+}
+
+function startJumpAnimation() {
+  if (!boneParams.L_Upperarm || !boneParams.R_Upperarm) return;
+
+  // Store base values (current position)
+  lUpperarmBaseZ = boneParams.L_Upperarm.z;
+  rUpperarmBaseZ = boneParams.R_Upperarm.z;
+  if (boneParams.L_Thigh) lThighBaseY = boneParams.L_Thigh.y;
+  if (boneParams.R_Thigh) rThighBaseY = boneParams.R_Thigh.y;
+
+  jumpAnimationTime = 0;
+}
+
+function updateJumpAnimation(deltaTime) {
+  if (!isJumping) {
+    // Reset to base when not jumping
+    if (boneParams.L_Upperarm && lUpperarmBaseZ !== 0) {
+      boneParams.L_Upperarm.z = lUpperarmBaseZ;
+      updateBoneRotation("L_Upperarm");
+    }
+    if (boneParams.R_Upperarm && rUpperarmBaseZ !== 0) {
+      boneParams.R_Upperarm.z = rUpperarmBaseZ;
+      updateBoneRotation("R_Upperarm");
+    }
+    if (boneParams.L_Thigh && lThighBaseY !== 0) {
+      boneParams.L_Thigh.y = lThighBaseY;
+      updateBoneRotation("L_Thigh");
+    }
+    if (boneParams.R_Thigh && rThighBaseY !== 0) {
+      boneParams.R_Thigh.y = rThighBaseY;
+      updateBoneRotation("R_Thigh");
+    }
+    return;
+  }
+
+  jumpAnimationTime += deltaTime * jumpAnimationSpeed;
+  const jumpUpDuration = 0.3; // Time to go from base to jump position
+  const jumpDownDuration = 0.3; // Time to go from jump back to base
+  const totalDuration = jumpUpDuration + jumpDownDuration;
+
+  let progress = 0;
+
+  if (jumpAnimationTime < jumpUpDuration) {
+    // Phase 1: Going up (base → jump position)
+    const t = jumpAnimationTime / jumpUpDuration;
+    // Ease out for going up
+    progress = 1 - (1 - t) * (1 - t);
+  } else if (jumpAnimationTime < totalDuration) {
+    // Phase 2: Going down (jump position → base)
+    const t = (jumpAnimationTime - jumpUpDuration) / jumpDownDuration;
+    // Ease in for going down
+    progress = 1 - t * t;
+  } else {
+    // Animation complete - reset to base
+    progress = 0;
+  }
+
+  if (boneParams.L_Upperarm && skierBones.L_Upperarm) {
+    boneParams.L_Upperarm.z =
+      lUpperarmBaseZ +
+      (jumpAnimationParams.lUpperarmZ - lUpperarmBaseZ) * progress;
+    updateBoneRotation("L_Upperarm");
+  }
+
+  if (boneParams.R_Upperarm && skierBones.R_Upperarm) {
+    boneParams.R_Upperarm.z =
+      rUpperarmBaseZ +
+      (jumpAnimationParams.rUpperarmZ - rUpperarmBaseZ) * progress;
+    updateBoneRotation("R_Upperarm");
+  }
+
+  if (boneParams.L_Thigh && skierBones.L_Thigh) {
+    boneParams.L_Thigh.y =
+      lThighBaseY +
+      (jumpAnimationParams.lThighY - lThighBaseY) * progress;
+    updateBoneRotation("L_Thigh");
+  }
+
+  if (boneParams.R_Thigh && skierBones.R_Thigh) {
+    boneParams.R_Thigh.y =
+      rThighBaseY +
+      (jumpAnimationParams.rThighY - rThighBaseY) * progress;
+    updateBoneRotation("R_Thigh");
+  }
+}
+
+function onKeyDown(event) {
+  if (event.key === "ArrowLeft" || event.key === "a") moveLane(-1);
+  if (event.key === "ArrowRight" || event.key === "d") moveLane(1);
+  if (event.key === "ArrowUp" || event.key === " " || event.key === "w")
+    jump();
+}
+
+function setupSwipeControls() {
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchEndX = 0;
+  let touchEndY = 0;
+
+  document.addEventListener(
+    "touchstart",
+    (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+      touchStartY = e.changedTouches[0].screenY;
+    },
+    { passive: false }
+  );
+
+  document.addEventListener(
+    "touchend",
+    (e) => {
+      touchEndX = e.changedTouches[0].screenX;
+      touchEndY = e.changedTouches[0].screenY;
+      handleSwipe();
+    },
+    { passive: false }
+  );
+
+  function handleSwipe() {
+    const dx = touchEndX - touchStartX;
+    const dy = touchEndY - touchStartY;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      if (Math.abs(dx) > 40) {
+        if (dx < 0) moveLane(-1);
+        else moveLane(1);
+      }
+    } else {
+      if (dy < -40) {
+        jump();
+      }
+    }
+  }
+}
+
+// Initialize audio on first user interaction (required for autoplay)
+let audioInitialized = false;
+function initAudioOnInteraction() {
+  if (!audioInitialized) {
+    initAudio();
+  }
+}
+
+init();
+
+// Try to initialize audio immediately on page load
+// If autoplay is blocked, it will be initialized on first user interaction
+try {
+  initAudio();
+} catch (err) {
+  console.log("Audio initialization deferred until user interaction");
+}
+
+// Listen for user interactions to enable audio (fallback if autoplay blocked)
+document.addEventListener("click", initAudioOnInteraction, {
+  once: true,
+});
+document.addEventListener("keydown", initAudioOnInteraction, {
+  once: true,
+});
+document.addEventListener("touchstart", initAudioOnInteraction, {
+  once: true,

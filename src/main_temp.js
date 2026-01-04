@@ -1,947 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
-    <title>Alpine Rush: Pro Edition</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    <style>
-      /* CSS Reset */
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-        touch-action: none;
-        user-select: none;
-      }
-
-      body {
-        overflow: hidden;
-        background: linear-gradient(to bottom, #87ceeb, #e0f7fa);
-        font-family: "Segoe UI", monospace;
-      }
-
-      /* UI Layer */
-      #ui-layer {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        pointer-events: none;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        padding: 20px;
-        opacity: 0;
-        transition: opacity 0.5s ease-in;
-      }
-
-      #ui-layer.visible {
-        opacity: 1;
-      }
-
-      #score-board {
-        text-align: center;
-        color: #333;
-        text-shadow: 0 0 2px white;
-      }
-
-      #score {
-        font-size: 3rem;
-        font-weight: 800;
-        color: #2c3e50;
-      }
-
-      #label {
-        font-size: 1rem;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        color: #555;
-        font-weight: bold;
-      }
-
-      #high-score {
-        font-size: 1rem;
-        color: #666;
-        margin-top: 5px;
-        text-shadow: 0 0 2px white;
-      }
-
-      #lives {
-        position: absolute;
-        top: 20px;
-        left: 20px;
-        color: #2c3e50;
-        font-size: 1.5rem;
-        font-weight: 800;
-        text-shadow: 0 0 2px white;
-      }
-
-      #game-over-screen {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.7);
-        display: none;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        z-index: 2000;
-        pointer-events: auto;
-      }
-
-      #game-over-screen.visible {
-        display: flex;
-      }
-
-      #game-over-content {
-        background: #ffffff;
-        padding: 40px;
-        border-radius: 20px;
-        text-align: center;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-        position: relative;
-        animation: fadeInUp 0.5s ease-out;
-        overflow: visible;
-      }
-
-      /* Candy cane border effect */
-      #game-over-content::before {
-        content: "";
-        position: absolute;
-        top: -8px;
-        left: -8px;
-        right: -8px;
-        bottom: -8px;
-        border-radius: 28px;
-        background: repeating-linear-gradient(
-          45deg,
-          #dc143c 0px,
-          #dc143c 20px,
-          #ffffff 20px,
-          #ffffff 40px
-        );
-        z-index: -2;
-        pointer-events: none;
-      }
-
-      #game-over-content::after {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        border-radius: 20px;
-        background: #ffffff;
-        z-index: -1;
-        pointer-events: none;
-      }
-
-      /* Start Screen */
-      #start-screen {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        z-index: 3000;
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-image: url("/assets/images/bg.webp");
-        transition: opacity 0.5s ease-out;
-      }
-
-      #start-screen.hidden {
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      /* Mobile background */
-      @media (max-width: 768px) {
-        #start-screen {
-          background-image: url("/assets/images/bg-mobile.webp");
-        }
-      }
-
-      #start-content {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 30px;
-        padding: 20px;
-        text-align: center;
-        animation: fadeInUp 1s ease-out;
-        position: relative;
-        width: 100%;
-        height: 100%;
-        z-index: 1;
-      }
-
-      @media (max-width: 768px) {
-        #start-content {
-          justify-content: flex-start;
-          padding-top: 40px;
-          gap: 25px;
-        }
-      }
-
-      @keyframes fadeInUp {
-        from {
-          opacity: 0;
-          transform: translateY(30px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      #title-image {
-        max-width: 90%;
-        width: 600px;
-        height: auto;
-        filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.3));
-        animation: titleFloat 3s ease-in-out infinite;
-      }
-
-      @keyframes titleFloat {
-        0%,
-        100% {
-          transform: translateY(0px);
-        }
-        50% {
-          transform: translateY(-10px);
-        }
-      }
-
-      @media (max-width: 768px) {
-        #title-image {
-          width: 80%;
-          max-width: 400px;
-          margin-top: 0;
-        }
-      }
-
-      #character-image {
-        max-width: 250px;
-        height: auto;
-        filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.2));
-        position: absolute;
-        bottom: 0;
-        left: 50px;
-        transform: translateX(0);
-        z-index: 10;
-      }
-
-      @media (max-width: 768px) {
-        #character-image {
-          max-width: 260px;
-          left: 20px;
-          transform: translateX(0);
-        }
-      }
-
-      #start-button {
-        background: linear-gradient(135deg, #e8f4f8, #b8d4e3);
-        color: #2c3e50;
-        border: 3px solid #ffffff;
-        padding: 20px 50px;
-        font-size: 1.6rem;
-        font-weight: bold;
-        border-radius: 20px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        font-family: "Segoe UI", monospace;
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2),
-          inset 0 2px 10px rgba(255, 255, 255, 0.8),
-          0 0 0 2px rgba(255, 255, 255, 0.3);
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        position: relative;
-        overflow: hidden;
-      }
-
-      #start-button::before {
-        content: "";
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: linear-gradient(
-          45deg,
-          transparent 30%,
-          rgba(255, 255, 255, 0.3) 50%,
-          transparent 70%
-        );
-        transform: rotate(45deg);
-        transition: all 0.5s ease;
-        opacity: 0;
-      }
-
-      #start-button:hover::before {
-        opacity: 1;
-        animation: shimmer 1.5s infinite;
-      }
-
-      @keyframes shimmer {
-        0% {
-          transform: translateX(-100%) translateY(-100%) rotate(45deg);
-        }
-        100% {
-          transform: translateX(100%) translateY(100%) rotate(45deg);
-        }
-      }
-
-      #start-button:hover {
-        background: linear-gradient(135deg, #ffffff, #d4e8f0);
-        transform: scale(1.05);
-        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3),
-          inset 0 2px 10px rgba(255, 255, 255, 0.9),
-          0 0 0 3px rgba(255, 255, 255, 0.5);
-        border-color: #ffffff;
-      }
-
-      #start-button:active {
-        transform: scale(0.98);
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2),
-          inset 0 2px 5px rgba(0, 0, 0, 0.1);
-      }
-
-      #start-button:disabled,
-      #start-button.loading {
-        cursor: not-allowed;
-        opacity: 0.7;
-        background: linear-gradient(135deg, #d0d0d0, #b0b0b0);
-        pointer-events: none;
-      }
-
-      #start-button:disabled:hover,
-      #start-button.loading:hover {
-        transform: none;
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15),
-          inset 0 2px 5px rgba(255, 255, 255, 0.5);
-      }
-
-      @media (max-width: 768px) {
-        #start-button {
-          padding: 18px 40px;
-          font-size: 1.3rem;
-          border-radius: 18px;
-        }
-      }
-
-      #game-over-title {
-        font-size: 3rem;
-        font-weight: 900;
-        color: #2c3e50;
-        margin-bottom: 20px;
-      }
-
-      #final-score {
-        font-size: 2rem;
-        color: #555;
-        margin-bottom: 10px;
-      }
-
-      #high-score-display {
-        font-size: 1.5rem;
-        color: #f1c40f;
-        margin-bottom: 30px;
-        font-weight: bold;
-      }
-
-      #retry-button,
-      #quit-button,
-      #claim-gift-button {
-        background: linear-gradient(135deg, #e8f4f8, #b8d4e3);
-        color: #2c3e50;
-        border: 3px solid #ffffff;
-        padding: 15px 40px;
-        font-size: 1.2rem;
-        font-weight: bold;
-        border-radius: 15px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        font-family: "Segoe UI", monospace;
-        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2),
-          inset 0 2px 8px rgba(255, 255, 255, 0.8),
-          0 0 0 2px rgba(255, 255, 255, 0.3);
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        position: relative;
-        overflow: hidden;
-        margin: 0 10px;
-        text-decoration: none;
-        display: inline-block;
-      }
-
-      #retry-button::before,
-      #quit-button::before,
-      #claim-gift-button::before {
-        content: "";
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: linear-gradient(
-          45deg,
-          transparent 30%,
-          rgba(255, 255, 255, 0.3) 50%,
-          transparent 70%
-        );
-        transform: rotate(45deg);
-        transition: all 0.5s ease;
-        opacity: 0;
-      }
-
-      #retry-button:hover::before,
-      #quit-button:hover::before,
-      #claim-gift-button:hover::before {
-        opacity: 1;
-        animation: shimmer 1.5s infinite;
-      }
-
-      #retry-button:hover,
-      #quit-button:hover,
-      #claim-gift-button:hover {
-        background: linear-gradient(135deg, #ffffff, #d4e8f0);
-        transform: scale(1.05);
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3),
-          inset 0 2px 10px rgba(255, 255, 255, 0.9),
-          0 0 0 3px rgba(255, 255, 255, 0.5);
-        border-color: #ffffff;
-      }
-
-      #retry-button:active,
-      #quit-button:active,
-      #claim-gift-button:active {
-        transform: scale(0.98);
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2),
-          inset 0 2px 5px rgba(0, 0, 0, 0.1);
-      }
-
-      #game-over-buttons {
-        display: flex;
-        gap: 15px;
-        justify-content: center;
-        flex-wrap: wrap;
-        margin-top: 10px;
-      }
-
-      @media (max-width: 768px) {
-        #retry-button,
-        #quit-button,
-        #claim-gift-button {
-          padding: 14px 35px;
-          font-size: 1.1rem;
-          border-radius: 12px;
-        }
-      }
-
-      /* Debug Panel */
-      #debug-panel {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        width: 280px;
-        background: rgba(0, 0, 0, 0.8);
-        color: white;
-        border-radius: 8px;
-        pointer-events: auto;
-        font-size: 0.9rem;
-        z-index: 100;
-        overflow: hidden;
-        transition: height 0.3s ease;
-      }
-
-      #skier-panel {
-        display: none; /* Hidden but kept for functionality */
-      }
-
-      #debug-header {
-        padding: 15px;
-        background: rgba(255, 255, 255, 0.1);
-        cursor: pointer;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        user-select: none;
-      }
-
-      #debug-header h3 {
-        margin: 0;
-        color: #f1c40f;
-        font-size: 1rem;
-      }
-
-      #debug-content {
-        padding: 15px;
-        display: block;
-      }
-
-      #debug-panel.collapsed #debug-content {
-        display: none;
-      }
-
-      #skier-panel.collapsed #skier-content {
-        display: none;
-      }
-
-      .control-group {
-        margin-bottom: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-
-      .control-group label {
-        width: 60px;
-      }
-      .control-group input {
-        width: 140px;
-      }
-      .control-group span {
-        width: 40px;
-        text-align: right;
-        font-size: 0.8rem;
-        color: #ccc;
-      }
-
-      #camera-readout {
-        margin-top: 15px;
-        padding-top: 10px;
-        border-top: 1px solid #555;
-        font-size: 0.75rem;
-        line-height: 1.4;
-        color: #87ceeb;
-        user-select: text;
-      }
-
-      /* Crash Effect */
-      #crash-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: red;
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.1s;
-        mix-blend-mode: overlay;
-      }
-
-      #jump-msg {
-        position: absolute;
-        top: 40%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        color: #f1c40f;
-        font-weight: 900;
-        font-size: 2rem;
-        text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.2);
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.2s;
-      }
-
-      /* Settings Menu */
-      #settings-button {
-        position: absolute;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 50px;
-        height: 50px;
-        background: linear-gradient(135deg, #e8f4f8, #b8d4e3);
-        border: 3px solid #ffffff;
-        border-radius: 12px;
-        cursor: pointer;
-        pointer-events: auto;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 24px;
-        color: #2c3e50;
-        transition: all 0.3s ease;
-        z-index: 1000;
-        margin-left: -35px;
-        opacity: 0;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2),
-          inset 0 2px 8px rgba(255, 255, 255, 0.8),
-          0 0 0 2px rgba(255, 255, 255, 0.3);
-      }
-
-      #settings-button.visible {
-        opacity: 1;
-      }
-
-      #settings-button:hover {
-        background: linear-gradient(135deg, #ffffff, #d4e8f0);
-        transform: translateX(-50%) scale(1.1);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3),
-          inset 0 2px 10px rgba(255, 255, 255, 0.9),
-          0 0 0 3px rgba(255, 255, 255, 0.5);
-        border-color: #ffffff;
-      }
-
-      /* Pause/Play Button */
-      #pause-button {
-        position: absolute;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 50px;
-        height: 50px;
-        background: linear-gradient(135deg, #e8f4f8, #b8d4e3);
-        border: 3px solid #ffffff;
-        border-radius: 12px;
-        cursor: pointer;
-        pointer-events: auto;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 24px;
-        color: #2c3e50;
-        transition: all 0.3s ease;
-        z-index: 1000;
-        margin-left: 35px;
-        opacity: 0;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2),
-          inset 0 2px 8px rgba(255, 255, 255, 0.8),
-          0 0 0 2px rgba(255, 255, 255, 0.3);
-      }
-
-      #pause-button.visible {
-        opacity: 1;
-      }
-
-      #pause-button:hover {
-        background: linear-gradient(135deg, #ffffff, #d4e8f0);
-        transform: translateX(-50%) scale(1.1);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3),
-          inset 0 2px 10px rgba(255, 255, 255, 0.9),
-          0 0 0 3px rgba(255, 255, 255, 0.5);
-        border-color: #ffffff;
-      }
-
-      #settings-menu {
-        position: absolute;
-        bottom: 80px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: linear-gradient(
-          135deg,
-          rgba(232, 244, 248, 0.98),
-          rgba(184, 212, 227, 0.98)
-        );
-        border: 3px solid #ffffff;
-        border-radius: 15px;
-        padding: 20px;
-        min-width: 200px;
-        pointer-events: auto;
-        opacity: 0;
-        visibility: hidden;
-        transition: all 0.3s ease;
-        z-index: 1000;
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3),
-          inset 0 2px 10px rgba(255, 255, 255, 0.8),
-          0 0 0 2px rgba(255, 255, 255, 0.3);
-      }
-
-      #settings-menu.visible {
-        opacity: 1;
-        visibility: visible;
-      }
-
-      #settings-menu h3 {
-        color: #2c3e50;
-        margin: 0 0 15px 0;
-        font-size: 1rem;
-        text-align: center;
-        font-weight: bold;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-      }
-
-      .settings-option {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 12px;
-        color: #2c3e50;
-        font-size: 0.9rem;
-      }
-
-      .settings-option:last-child {
-        margin-bottom: 0;
-      }
-
-      .settings-option label {
-        cursor: pointer;
-        user-select: none;
-        font-weight: 500;
-      }
-
-      .settings-option input[type="checkbox"] {
-        width: 20px;
-        height: 20px;
-        cursor: pointer;
-        accent-color: #2c3e50;
-      }
-    </style>
-  </head>
-  <body>
-    <!-- Start Screen -->
-    <div id="start-screen">
-      <div id="start-content">
-        <img
-          id="title-image"
-          src="/assets/images/title.webp"
-          alt="Alpine Rush"
-        />
-        <img id="character-image" src="/assets/images/ana.webp" alt="Ana" />
-        <button id="start-button">Start Game</button>
-      </div>
-    </div>
-
-    <div id="crash-overlay"></div>
-    <div id="jump-msg">JUMP!</div>
-
-    <!-- Settings Menu -->
-    <div id="pause-button" title="Pause">⏸️</div>
-    <div id="settings-button" title="Settings">⚙️</div>
-    <div id="settings-menu">
-      <h3>Settings</h3>
-      <div class="settings-option">
-        <label for="music-toggle">Music</label>
-        <input type="checkbox" id="music-toggle" checked />
-      </div>
-      <div class="settings-option">
-        <label for="ambient-toggle">Ambient Sound</label>
-        <input type="checkbox" id="ambient-toggle" checked />
-      </div>
-      <div class="settings-option">
-        <label for="sfx-toggle">Sound Effects</label>
-        <input type="checkbox" id="sfx-toggle" checked />
-      </div>
-    </div>
-
-    <!-- Camera Debug Panel -->
-    <div id="debug-panel" class="collapsed">
-      <!-- Default to collapsed -->
-      <div id="debug-header">
-        <h3>Camera Controls</h3>
-        <span id="toggle-icon">▼</span>
-      </div>
-      <div id="debug-content">
-        <div class="control-group">
-          <label>Pos Y</label>
-          <input type="range" id="camY" min="50" max="200" step="1" />
-          <span id="valY">0</span>
-        </div>
-        <div class="control-group">
-          <label>Pos Z</label>
-          <input type="range" id="camZ" min="0" max="100" step="1" />
-          <span id="valZ">0</span>
-        </div>
-
-        <hr style="border: 0; border-top: 1px solid #555; margin: 10px 0" />
-
-        <div class="control-group">
-          <label>Look Y</label>
-          <input type="range" id="lookY" min="0" max="150" step="1" />
-          <span id="valLookY">0</span>
-        </div>
-        <div class="control-group">
-          <label>Look Z</label>
-          <input type="range" id="lookZ" min="-50" max="50" step="1" />
-          <span id="valLookZ">0</span>
-        </div>
-
-        <div class="control-group">
-          <label>FOV</label>
-          <input type="range" id="camFov" min="10" max="120" step="1" />
-          <span id="valFov">0</span>
-        </div>
-
-        <div id="camera-readout">Values will appear here...</div>
-      </div>
-    </div>
-
-    <!-- Skier Debug Panel -->
-    <div id="skier-panel">
-      <div id="skier-header">
-        <h3>Skier Controls</h3>
-        <span id="skier-toggle-icon">▲</span>
-      </div>
-      <div id="skier-content">
-        <div class="control-group">
-          <label>Scale</label>
-          <input type="range" id="skierScale" min="0.5" max="10" step="0.1" />
-          <span id="valSkierScale">3.0</span>
-        </div>
-
-        <hr style="border: 0; border-top: 1px solid #555; margin: 10px 0" />
-
-        <div class="control-group">
-          <label>Pos X</label>
-          <input type="range" id="skierX" min="-5" max="5" step="0.1" />
-          <span id="valSkierX">0</span>
-        </div>
-        <div class="control-group">
-          <label>Pos Y</label>
-          <input type="range" id="skierY" min="-5" max="5" step="0.1" />
-          <span id="valSkierY">0</span>
-        </div>
-        <div class="control-group">
-          <label>Pos Z</label>
-          <input type="range" id="skierZ" min="-5" max="5" step="0.1" />
-          <span id="valSkierZ">0</span>
-        </div>
-
-        <hr style="border: 0; border-top: 1px solid #555; margin: 10px 0" />
-
-        <div class="control-group">
-          <label>Rot X</label>
-          <input
-            type="range"
-            id="skierRotX"
-            min="-3.14"
-            max="3.14"
-            step="0.1"
-          />
-          <span id="valSkierRotX">0</span>
-        </div>
-        <div class="control-group">
-          <label>Rot Y</label>
-          <input
-            type="range"
-            id="skierRotY"
-            min="-3.14"
-            max="3.14"
-            step="0.1"
-          />
-          <span id="valSkierRotY">0</span>
-        </div>
-        <div class="control-group">
-          <label>Rot Z</label>
-          <input
-            type="range"
-            id="skierRotZ"
-            min="-3.14"
-            max="3.14"
-            step="0.1"
-          />
-          <span id="valSkierRotZ">0</span>
-        </div>
-
-        <div
-          id="skier-readout"
-          style="
-            margin-top: 15px;
-            padding-top: 10px;
-            border-top: 1px solid #555;
-            font-size: 0.75rem;
-            line-height: 1.4;
-            color: #87ceeb;
-            user-select: text;
-          "
-        >
-          Values will appear here...
-        </div>
-
-        <div
-          id="bone-controls"
-          style="
-            margin-top: 15px;
-            padding-top: 10px;
-            border-top: 1px solid #555;
-            display: none;
-          "
-        >
-          <div
-            style="
-              font-size: 0.85rem;
-              color: #f1c40f;
-              margin-bottom: 10px;
-              font-weight: bold;
-            "
-          >
-            Bone Controls
-          </div>
-          <button
-            id="apply-skiing-pose"
-            style="
-              width: 100%;
-              padding: 8px;
-              margin-bottom: 10px;
-              background: #27ae60;
-              color: white;
-              border: none;
-              border-radius: 4px;
-              cursor: pointer;
-              font-size: 0.85rem;
-              font-weight: bold;
-            "
-          >
-            Apply Skiing Pose
-          </button>
-          <div id="bone-controls-content"></div>
-        </div>
-      </div>
-    </div>
-
-    <div id="ui-layer">
-      <div id="lives">❤️❤️❤️</div>
-      <div id="score-board">
-        <div id="score">0</div>
-        <div id="label">Meters</div>
-        <div id="high-score">Best: 0</div>
-      </div>
-    </div>
-
-    <!-- Game Over Screen -->
-    <div id="game-over-screen">
-      <div id="game-over-content">
-        <div id="game-over-title">Game Over</div>
-        <div id="final-score">
-          Distance: <span id="final-score-value">0</span>m
-        </div>
-        <div id="high-score-display">
-          Best: <span id="high-score-value">0</span>m
-        </div>
-        <div id="game-over-buttons">
-          <button id="retry-button">Retry</button>
-          <button id="quit-button">Quit</button>
-          <a
-            id="claim-gift-button"
-            href="https://www.instagram.com/p/DRj55uzCC65/"
-            target="_blank"
-            rel="noopener noreferrer"
-            style="display: none"
-            >Claim gift 🎁</a
-          >
-        </div>
-      </div>
-    </div>
-
     <script>
       // --- CONFIGURATION ---
       const CONFIG = {
@@ -1393,7 +449,7 @@
 
       // Skier Transform State
       let skierParams = {
-        scale: isMobile() ? 5.5 : 4.4, // Larger scale on mobile for better visibility
+        scale: 4.4,
         posX: -0.2,
         posY: 0.6,
         posZ: -0.3,
@@ -1406,30 +462,6 @@
       let boneParams = {};
 
       // --- HELPER: TEXTURES ---
-      // --- MOBILE OPTIMIZATION HELPER ---
-      function optimizeModelForMobile(sceneObject) {
-        if (!isMobile()) return; // Keep high quality on desktop
-
-        sceneObject.traverse((child) => {
-          if (child.isMesh && child.material) {
-            // Create a cheaper material preserving the color/map
-            const oldMat = child.material;
-            const newMat = new THREE.MeshLambertMaterial({
-              map: oldMat.map,
-              color: oldMat.color,
-              // Transfer alpha test if needed for transparency (leaves)
-              alphaTest: oldMat.alphaTest,
-              transparent: oldMat.transparent,
-              side: oldMat.side,
-            });
-
-            // Dispose old material to free memory
-            // oldMat.dispose(); // Optional: be careful if materials are shared
-            child.material = newMat;
-          }
-        });
-      }
-
       // --- START SCREEN ---
       function startGame() {
         // Ensure audio is initialized
@@ -1596,22 +628,23 @@
 
         // Mobile performance optimizations
         const isMobileDevice = isMobile();
-        // Force 1.0 on mobile. It looks slightly less crisp but runs 2x faster.
-        const pixelRatio = isMobileDevice ? 1.0 : window.devicePixelRatio;
+        const pixelRatio = isMobileDevice
+          ? Math.min(window.devicePixelRatio, 1.5)
+          : window.devicePixelRatio;
 
         renderer = new THREE.WebGLRenderer({
-          antialias: true, // Keep antialiasing enabled for better visuals
+          antialias: !isMobileDevice, // Disable antialiasing on mobile
           alpha: false,
           powerPreference: "high-performance",
         });
         renderer.setPixelRatio(pixelRatio); // Limit pixel ratio on mobile
         renderer.setSize(window.innerWidth, window.innerHeight);
 
-        // Completely disable shadow maps on mobile
-        renderer.shadowMap.enabled = !isMobileDevice;
-        if (!isMobileDevice) {
-          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        }
+        // Shadows: reduce quality on mobile for better performance
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = isMobileDevice
+          ? THREE.BasicShadowMap
+          : THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
         // Lighting - match pose editor for consistent look
@@ -1620,19 +653,17 @@
 
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
         dirLight.position.set(10, 20, 10);
-        // Only cast shadows if not mobile
-        dirLight.castShadow = !isMobileDevice;
-        if (!isMobileDevice) {
-          // Shadow map settings only needed on desktop
-          dirLight.shadow.mapSize.width = 2048;
-          dirLight.shadow.mapSize.height = 2048;
-          dirLight.shadow.camera.near = 0.5;
-          dirLight.shadow.camera.far = 200;
-          dirLight.shadow.camera.left = -50;
-          dirLight.shadow.camera.right = 50;
-          dirLight.shadow.camera.top = 50;
-          dirLight.shadow.camera.bottom = -50;
-        }
+        dirLight.castShadow = true;
+        // Reduce shadow map resolution on mobile (2048 -> 512)
+        const shadowMapSize = isMobileDevice ? 512 : 2048;
+        dirLight.shadow.mapSize.width = shadowMapSize;
+        dirLight.shadow.mapSize.height = shadowMapSize;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 200;
+        dirLight.shadow.camera.left = -50;
+        dirLight.shadow.camera.right = 50;
+        dirLight.shadow.camera.top = 50;
+        dirLight.shadow.camera.bottom = -50;
         scene.add(dirLight);
 
         // Add a subtle fill light from the front for better model visibility
@@ -1640,13 +671,7 @@
         fillLight.position.set(-10, 10, -10);
         scene.add(fillLight);
 
-        // Reduce geometry density on mobile for better performance
-        const segments = isMobileDevice ? 32 : 64;
-        const sphereGeo = new THREE.SphereGeometry(
-          CONFIG.worldRadius,
-          segments,
-          segments
-        );
+        const sphereGeo = new THREE.SphereGeometry(CONFIG.worldRadius, 64, 64);
         const sphereMat = new THREE.MeshLambertMaterial({
           color: CONFIG.groundColor,
         });
@@ -2058,7 +1083,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           "/assets/models/skier_v1.glb",
           (gltf) => {
             skierModel = gltf.scene;
-            // Don't optimize skier model - it's just one object and optimization may interfere with animations
 
             // Center the model and position it on the ground (base positioning)
             const box = new THREE.Box3().setFromObject(skierModel);
@@ -2265,7 +1289,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           "assets/models/alpine_tree_v1.glb",
           (gltf) => {
             treeModelTemplate = gltf.scene;
-            optimizeModelForMobile(treeModelTemplate); // Optimize for mobile
             console.log("Alpine tree model loaded successfully");
             // Spawn initial trees after model is loaded
             spawnInitialTrees();
@@ -2296,7 +1319,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           "assets/models/rock_v1.glb",
           (gltf) => {
             rockModelTemplate = gltf.scene;
-            optimizeModelForMobile(rockModelTemplate); // Optimize for mobile
             console.log("Rock model loaded successfully");
             assetLoadingState.rock = true;
             updateLoadingProgress();
@@ -2325,7 +1347,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           "assets/models/red_sign_v1.glb",
           (gltf) => {
             redSignModelTemplate = gltf.scene;
-            optimizeModelForMobile(redSignModelTemplate); // Optimize for mobile
             console.log("Red sign model loaded successfully");
             assetLoadingState.redSign = true;
             updateLoadingProgress();
@@ -2352,7 +1373,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           "assets/models/blue_sign_v1.glb",
           (gltf) => {
             blueSignModelTemplate = gltf.scene;
-            optimizeModelForMobile(blueSignModelTemplate); // Optimize for mobile
             console.log("Blue sign model loaded successfully");
             assetLoadingState.blueSign = true;
             updateLoadingProgress();
@@ -2381,7 +1401,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           "assets/models/wooden_fence_v1.glb",
           (gltf) => {
             fenceModelTemplate = gltf.scene;
-            optimizeModelForMobile(fenceModelTemplate); // Optimize for mobile
             console.log("Wooden fence model loaded successfully");
             assetLoadingState.fence = true;
             updateLoadingProgress();
@@ -2408,7 +1427,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           "assets/models/gift_v1.glb",
           (gltf) => {
             giftModelTemplate = gltf.scene;
-            optimizeModelForMobile(giftModelTemplate); // Optimize for mobile
             console.log("Gift model loaded successfully");
             assetLoadingState.gift = true;
             updateLoadingProgress();
@@ -3899,6 +2917,3 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       document.addEventListener("touchstart", initAudioOnInteraction, {
         once: true,
       });
-    </script>
-  </body>
-</html>

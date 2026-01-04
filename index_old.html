@@ -9,6 +9,7 @@
     <title>Alpine Rush: Pro Edition</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <link rel="stylesheet" href="/styles/main.css" />
     <style>
       /* CSS Reset */
       * {
@@ -1393,7 +1394,7 @@
 
       // Skier Transform State
       let skierParams = {
-        scale: isMobile() ? 5.5 : 4.4, // Larger scale on mobile for better visibility
+        scale: 4.4,
         posX: -0.2,
         posY: 0.6,
         posZ: -0.3,
@@ -1406,30 +1407,6 @@
       let boneParams = {};
 
       // --- HELPER: TEXTURES ---
-      // --- MOBILE OPTIMIZATION HELPER ---
-      function optimizeModelForMobile(sceneObject) {
-        if (!isMobile()) return; // Keep high quality on desktop
-
-        sceneObject.traverse((child) => {
-          if (child.isMesh && child.material) {
-            // Create a cheaper material preserving the color/map
-            const oldMat = child.material;
-            const newMat = new THREE.MeshLambertMaterial({
-              map: oldMat.map,
-              color: oldMat.color,
-              // Transfer alpha test if needed for transparency (leaves)
-              alphaTest: oldMat.alphaTest,
-              transparent: oldMat.transparent,
-              side: oldMat.side,
-            });
-
-            // Dispose old material to free memory
-            // oldMat.dispose(); // Optional: be careful if materials are shared
-            child.material = newMat;
-          }
-        });
-      }
-
       // --- START SCREEN ---
       function startGame() {
         // Ensure audio is initialized
@@ -1596,22 +1573,23 @@
 
         // Mobile performance optimizations
         const isMobileDevice = isMobile();
-        // Force 1.0 on mobile. It looks slightly less crisp but runs 2x faster.
-        const pixelRatio = isMobileDevice ? 1.0 : window.devicePixelRatio;
+        const pixelRatio = isMobileDevice
+          ? Math.min(window.devicePixelRatio, 1.5)
+          : window.devicePixelRatio;
 
         renderer = new THREE.WebGLRenderer({
-          antialias: true, // Keep antialiasing enabled for better visuals
+          antialias: !isMobileDevice, // Disable antialiasing on mobile
           alpha: false,
           powerPreference: "high-performance",
         });
         renderer.setPixelRatio(pixelRatio); // Limit pixel ratio on mobile
         renderer.setSize(window.innerWidth, window.innerHeight);
 
-        // Completely disable shadow maps on mobile
-        renderer.shadowMap.enabled = !isMobileDevice;
-        if (!isMobileDevice) {
-          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        }
+        // Shadows: reduce quality on mobile for better performance
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = isMobileDevice
+          ? THREE.BasicShadowMap
+          : THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
         // Lighting - match pose editor for consistent look
@@ -1620,19 +1598,17 @@
 
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
         dirLight.position.set(10, 20, 10);
-        // Only cast shadows if not mobile
-        dirLight.castShadow = !isMobileDevice;
-        if (!isMobileDevice) {
-          // Shadow map settings only needed on desktop
-          dirLight.shadow.mapSize.width = 2048;
-          dirLight.shadow.mapSize.height = 2048;
-          dirLight.shadow.camera.near = 0.5;
-          dirLight.shadow.camera.far = 200;
-          dirLight.shadow.camera.left = -50;
-          dirLight.shadow.camera.right = 50;
-          dirLight.shadow.camera.top = 50;
-          dirLight.shadow.camera.bottom = -50;
-        }
+        dirLight.castShadow = true;
+        // Reduce shadow map resolution on mobile (2048 -> 512)
+        const shadowMapSize = isMobileDevice ? 512 : 2048;
+        dirLight.shadow.mapSize.width = shadowMapSize;
+        dirLight.shadow.mapSize.height = shadowMapSize;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 200;
+        dirLight.shadow.camera.left = -50;
+        dirLight.shadow.camera.right = 50;
+        dirLight.shadow.camera.top = 50;
+        dirLight.shadow.camera.bottom = -50;
         scene.add(dirLight);
 
         // Add a subtle fill light from the front for better model visibility
@@ -1640,13 +1616,7 @@
         fillLight.position.set(-10, 10, -10);
         scene.add(fillLight);
 
-        // Reduce geometry density on mobile for better performance
-        const segments = isMobileDevice ? 32 : 64;
-        const sphereGeo = new THREE.SphereGeometry(
-          CONFIG.worldRadius,
-          segments,
-          segments
-        );
+        const sphereGeo = new THREE.SphereGeometry(CONFIG.worldRadius, 64, 64);
         const sphereMat = new THREE.MeshLambertMaterial({
           color: CONFIG.groundColor,
         });
@@ -2058,7 +2028,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           "/assets/models/skier_v1.glb",
           (gltf) => {
             skierModel = gltf.scene;
-            // Don't optimize skier model - it's just one object and optimization may interfere with animations
 
             // Center the model and position it on the ground (base positioning)
             const box = new THREE.Box3().setFromObject(skierModel);
@@ -2265,7 +2234,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           "assets/models/alpine_tree_v1.glb",
           (gltf) => {
             treeModelTemplate = gltf.scene;
-            optimizeModelForMobile(treeModelTemplate); // Optimize for mobile
             console.log("Alpine tree model loaded successfully");
             // Spawn initial trees after model is loaded
             spawnInitialTrees();
@@ -2296,7 +2264,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           "assets/models/rock_v1.glb",
           (gltf) => {
             rockModelTemplate = gltf.scene;
-            optimizeModelForMobile(rockModelTemplate); // Optimize for mobile
             console.log("Rock model loaded successfully");
             assetLoadingState.rock = true;
             updateLoadingProgress();
@@ -2325,7 +2292,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           "assets/models/red_sign_v1.glb",
           (gltf) => {
             redSignModelTemplate = gltf.scene;
-            optimizeModelForMobile(redSignModelTemplate); // Optimize for mobile
             console.log("Red sign model loaded successfully");
             assetLoadingState.redSign = true;
             updateLoadingProgress();
@@ -2352,7 +2318,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           "assets/models/blue_sign_v1.glb",
           (gltf) => {
             blueSignModelTemplate = gltf.scene;
-            optimizeModelForMobile(blueSignModelTemplate); // Optimize for mobile
             console.log("Blue sign model loaded successfully");
             assetLoadingState.blueSign = true;
             updateLoadingProgress();
@@ -2381,7 +2346,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           "assets/models/wooden_fence_v1.glb",
           (gltf) => {
             fenceModelTemplate = gltf.scene;
-            optimizeModelForMobile(fenceModelTemplate); // Optimize for mobile
             console.log("Wooden fence model loaded successfully");
             assetLoadingState.fence = true;
             updateLoadingProgress();
@@ -2408,7 +2372,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           "assets/models/gift_v1.glb",
           (gltf) => {
             giftModelTemplate = gltf.scene;
-            optimizeModelForMobile(giftModelTemplate); // Optimize for mobile
             console.log("Gift model loaded successfully");
             assetLoadingState.gift = true;
             updateLoadingProgress();
