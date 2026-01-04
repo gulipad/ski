@@ -957,7 +957,7 @@
         jumpStrength: 0.7, // Lower jump height
         fogColor: 0x87ceeb,
         treeVerticalOffset: 3, // Vertical offset for playing trees (adjustable)
-        treeVerticalOffset: 2, // Vertical offset for gift
+        giftVerticalOffset: 2, // Vertical offset for gift
         groundColor: 0xffffff,
       };
 
@@ -965,8 +965,6 @@
       let scene, camera, renderer;
       let player, playerGroup;
       let worldSphere;
-      let particlesSystem;
-      let skiSnowParticles = null;
 
       // Animation
       let mixer;
@@ -1408,19 +1406,6 @@
       let boneParams = {};
 
       // --- HELPER: TEXTURES ---
-      function getParticleTexture() {
-        const canvas = document.createElement("canvas");
-        canvas.width = 32;
-        canvas.height = 32;
-        const ctx = canvas.getContext("2d");
-        const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
-        gradient.addColorStop(0, "rgba(255, 255, 255, 1)");
-        gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 32, 32);
-        return new THREE.CanvasTexture(canvas);
-      }
-
       // --- START SCREEN ---
       function startGame() {
         // Ensure audio is initialized
@@ -1456,6 +1441,14 @@
         if (pauseButton) {
           pauseButton.classList.add("visible");
         }
+
+        // Reset gift state for new game
+        if (activeGift) {
+          worldSphere.remove(activeGift.mesh);
+        }
+        activeGift = null;
+        giftCollected = false;
+        lastGiftSpawnDistance = 0;
 
         // Start the game
         gameActive = true;
@@ -1494,6 +1487,14 @@
         if (pauseButton) {
           pauseButton.classList.remove("visible");
         }
+
+        // Reset gift state
+        if (activeGift) {
+          worldSphere.remove(activeGift.mesh);
+        }
+        activeGift = null;
+        giftCollected = false;
+        lastGiftSpawnDistance = 0;
 
         // Reset game state
         gameActive = false;
@@ -1606,8 +1607,6 @@
         scene.add(worldSphere);
 
         createPlayer();
-        createParticleSystem();
-        createSkiSnowParticles();
 
         window.addEventListener("resize", onWindowResize, false);
         document.addEventListener("keydown", onKeyDown, false);
@@ -2188,180 +2187,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         skiR.position.set(0.4, 0.05, 0);
         skiR.castShadow = true;
         playerGroup.add(skiR);
-      }
-
-      function createParticleSystem() {
-        const particleCount = 250;
-        const particles = new THREE.BufferGeometry();
-        const positions = new Float32Array(particleCount * 3);
-        const velocities = [];
-
-        for (let i = 0; i < particleCount; i++) {
-          positions[i * 3] = 0;
-          positions[i * 3 + 1] = -500;
-          positions[i * 3 + 2] = 0;
-          velocities.push({
-            x: (Math.random() - 0.5) * 0.2,
-            y: Math.random() * 0.2,
-            z: -Math.random() * 0.5,
-          });
-        }
-
-        particles.setAttribute(
-          "position",
-          new THREE.BufferAttribute(positions, 3)
-        );
-
-        const pMaterial = new THREE.PointsMaterial({
-          color: 0xffffff,
-          size: 0.8,
-          map: getParticleTexture(),
-          transparent: true,
-          opacity: 0.8,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending,
-        });
-
-        particlesSystem = new THREE.Points(particles, pMaterial);
-        scene.add(particlesSystem);
-        particlesSystem.userData = { velocities: velocities };
-      }
-
-      function updateParticles() {
-        const positions = particlesSystem.geometry.attributes.position.array;
-        const velocities = particlesSystem.userData.velocities;
-
-        if (gameActive && currentRotationSpeed > 0.001) {
-          const index = Math.floor(Math.random() * 200);
-          if (!isJumping) {
-            positions[index * 3] = player.position.x + (Math.random() - 0.5);
-            positions[index * 3 + 1] = CONFIG.worldRadius;
-            positions[index * 3 + 2] = -1.5;
-          }
-        }
-
-        for (let i = 0; i < 200; i++) {
-          positions[i * 3] += velocities[i].x;
-          positions[i * 3 + 1] += velocities[i].y;
-          positions[i * 3 + 2] += velocities[i].z;
-
-          if (positions[i * 3 + 1] > 0) positions[i * 3 + 1] -= 0.1;
-          if (positions[i * 3 + 1] < CONFIG.worldRadius - 5)
-            positions[i * 3 + 1] = -500;
-        }
-        particlesSystem.geometry.attributes.position.needsUpdate = true;
-      }
-
-      function createSkiSnowParticles() {
-        const particleCount = 120;
-        const particles = new THREE.BufferGeometry();
-        const positions = new Float32Array(particleCount * 3);
-        const velocities = [];
-        const lifetimes = [];
-        const maxLifetime = 0.6;
-
-        // Initialize all particles as inactive (hidden)
-        for (let i = 0; i < particleCount; i++) {
-          positions[i * 3] = 0;
-          positions[i * 3 + 1] = -1000; // Hide off-screen initially
-          positions[i * 3 + 2] = 0;
-          velocities.push({ x: 0, y: 0, z: 0 });
-          lifetimes.push(0);
-        }
-
-        particles.setAttribute(
-          "position",
-          new THREE.BufferAttribute(positions, 3)
-        );
-
-        const pMaterial = new THREE.PointsMaterial({
-          color: 0xffffff,
-          size: 1.2, // Large size for visibility
-          map: getParticleTexture(),
-          transparent: true,
-          opacity: 1.0, // Full opacity
-          depthWrite: false,
-          blending: THREE.AdditiveBlending,
-          sizeAttenuation: true,
-        });
-
-        skiSnowParticles = new THREE.Points(particles, pMaterial);
-        // Add to playerGroup so particles move and rotate with the skier
-        playerGroup.add(skiSnowParticles);
-        skiSnowParticles.userData = {
-          velocities: velocities,
-          lifetimes: lifetimes,
-          maxLifetime: maxLifetime,
-          particleCount: particleCount,
-        };
-      }
-
-      function updateSkiSnowParticles(deltaTime) {
-        if (!skiSnowParticles || !gameActive || isPaused || isGameOver) return;
-
-        const positions = skiSnowParticles.geometry.attributes.position.array;
-        const userData = skiSnowParticles.userData;
-        const velocities = userData.velocities;
-        const lifetimes = userData.lifetimes;
-        const maxLifetime = userData.maxLifetime;
-
-        // Only emit particles when skiing (not jumping or crashing)
-        if (!isJumping && !isCrashing && currentRotationSpeed > 0.001) {
-          // Emit particles based on speed - always emit at least a few
-          const particlesPerFrame = Math.max(
-            3,
-            Math.floor(3 + currentRotationSpeed * 400)
-          );
-
-          for (let p = 0; p < particlesPerFrame; p++) {
-            // Find an inactive particle
-            for (let i = 0; i < userData.particleCount; i++) {
-              if (lifetimes[i] <= 0) {
-                // Spawn particles in local space relative to skier
-                // Skier model is positioned at skierParams.posZ = -0.3, so skis are around there
-                // Behind the skier means more negative Z in local space
-                const skiOffsetX = (Math.random() - 0.5) * 2.5; // Spread across ski width
-                const skiOffsetY = -0.2 + Math.random() * 0.1; // At ski level
-                const skiOffsetZ = -0.6 - Math.random() * 0.4; // Behind skis (more negative Z)
-
-                positions[i * 3] = skiOffsetX;
-                positions[i * 3 + 1] = skiOffsetY;
-                positions[i * 3 + 2] = skiOffsetZ;
-
-                // Set velocity - particles fly up and back (more negative Z)
-                velocities[i].x = (Math.random() - 0.5) * 0.4;
-                velocities[i].y = Math.random() * 0.5 + 0.3;
-                velocities[i].z = -Math.random() * 0.3 - 0.2; // Backward (negative Z)
-
-                lifetimes[i] = maxLifetime;
-                break;
-              }
-            }
-          }
-        }
-
-        // Update existing particles
-        for (let i = 0; i < userData.particleCount; i++) {
-          if (lifetimes[i] > 0) {
-            // Update position
-            positions[i * 3] += velocities[i].x * deltaTime * 10;
-            positions[i * 3 + 1] += velocities[i].y * deltaTime * 10;
-            positions[i * 3 + 2] += velocities[i].z * deltaTime * 10;
-
-            // Apply gravity
-            velocities[i].y -= 0.5 * deltaTime;
-
-            // Decay lifetime
-            lifetimes[i] -= deltaTime;
-
-            // Hide particle when lifetime expires
-            if (lifetimes[i] <= 0) {
-              positions[i * 3 + 1] = -1000; // Hide off-screen
-            }
-          }
-        }
-
-        skiSnowParticles.geometry.attributes.position.needsUpdate = true;
       }
 
       function placeOnSphere(obj, angleRad, xOffset) {
@@ -3012,7 +2837,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         if (!isPaused) {
           updateRightTurnAnimation(delta);
           updateLeftTurnAnimation(delta);
-          updateSkiSnowParticles(delta);
           updateGiftAnimation(delta);
         }
 
@@ -3110,29 +2934,30 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           lastBoundaryRotation = totalRotationForSpawn;
         }
 
-        // Spawn Gift (only if game is active, not paused, gift not collected, and score >= 100m)
-        // Spawn every 100m after the first 100m (at 100m, 200m, 300m, etc.)
+        // Spawn Gift (only if game is active, not paused, gift not collected, and score >= 1500m)
+        // Spawn first gift at 1500m, then every 250m after that (at 1500m, 1750m, 2000m, etc.)
         if (
           gameActive &&
           !isPaused &&
           !giftCollected &&
           !activeGift &&
-          score >= 100
+          score >= 1500
         ) {
-          const currentHundredMeterMark = Math.floor(score / 100);
-          const lastHundredMeterMark = Math.floor(lastGiftSpawnDistance / 100);
+          const currentTwoFiftyMeterMark = Math.floor((score - 1500) / 250);
+          const lastTwoFiftyMeterMark = Math.floor(
+            (lastGiftSpawnDistance - 1500) / 250
+          );
 
-          // Spawn gift when crossing into a new 100m mark
-          if (currentHundredMeterMark > lastHundredMeterMark) {
+          // Spawn gift when crossing into a new 250m mark (starting from 1500m)
+          if (currentTwoFiftyMeterMark > lastTwoFiftyMeterMark) {
             const giftAngle = -worldSphere.rotation.x + 0.5;
             spawnGift(giftAngle);
             lastGiftSpawnDistance = score;
           }
         }
 
-        // Update particles and cleanup (only if not paused)
+        // Cleanup (only if not paused)
         if (!isPaused) {
-          updateParticles();
           cleanupObjects();
         }
       }
@@ -3283,8 +3108,8 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           finalScoreValue.textContent = Math.floor(score);
           gameOverScreen.classList.add("visible");
 
-          // Show claim gift button if score is over 2000m
-          if (claimGiftButton && score > 100) {
+          // Show claim gift button only if gift was collected
+          if (claimGiftButton && giftCollected) {
             claimGiftButton.style.display = "inline-block";
           } else if (claimGiftButton) {
             claimGiftButton.style.display = "none";
@@ -3432,16 +3257,13 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         // Resume ambient sound if enabled
         startAmbientSound();
 
-        // Reset ski snow particles
-        if (skiSnowParticles) {
-          const positions = skiSnowParticles.geometry.attributes.position.array;
-          const lifetimes = skiSnowParticles.userData.lifetimes;
-          for (let i = 0; i < skiSnowParticles.userData.particleCount; i++) {
-            positions[i * 3 + 1] = -1000; // Hide all particles
-            lifetimes[i] = 0;
-          }
-          skiSnowParticles.geometry.attributes.position.needsUpdate = true;
+        // Reset gift state
+        if (activeGift) {
+          worldSphere.remove(activeGift.mesh);
         }
+        activeGift = null;
+        giftCollected = false;
+        lastGiftSpawnDistance = 0;
 
         // Spawn initial trees and boundaries for new game
         spawnInitialTrees();
