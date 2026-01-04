@@ -3657,13 +3657,15 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           updateGiftAnimation(delta);
         }
 
-        // World rotation (only if not paused)
+        // World rotation (only if not paused) - time-based for consistent speed across frame rates
         if (!isPaused) {
-          worldSphere.rotation.x -= currentRotationSpeed;
+          // Scale by delta and 60 to maintain same speed regardless of FPS
+          // delta is typically ~0.016 at 60fps, so * 60 makes it frame-rate independent
+          worldSphere.rotation.x -= currentRotationSpeed * delta * 60;
         }
         const totalRotation = -worldSphere.rotation.x;
 
-        if (gameActive && !isPaused) update();
+        if (gameActive && !isPaused) update(delta);
 
         // Skier roll away animation when game over (outside update so it continues)
         if (isGameOver) {
@@ -3692,10 +3694,11 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         renderer.render(scene, camera);
       }
 
-      function update() {
-        // Gradually increase speed over time (very slight acceleration)
+      function update(delta) {
+        // Gradually increase speed over time (very slight acceleration) - time-based
         if (currentRotationSpeed < CONFIG.maxSpeed) {
-          currentRotationSpeed += CONFIG.accelerationRate;
+          // Scale acceleration by delta and 60 to maintain same acceleration rate regardless of FPS
+          currentRotationSpeed += CONFIG.accelerationRate * delta * 60;
           if (currentRotationSpeed > CONFIG.maxSpeed) {
             currentRotationSpeed = CONFIG.maxSpeed;
           }
@@ -3737,8 +3740,9 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
 
         // Only update score if game is active AND not game over
         // This prevents score accumulation during game over or restart
+        // Score is time-based: scale by delta and 60 to maintain consistent scoring regardless of FPS
         if (gameActive && !isGameOver && !isPaused) {
-          score += currentRotationSpeed * 100;
+          score += currentRotationSpeed * 100 * delta * 60;
           document.getElementById("score").innerText = Math.floor(score);
         }
 
