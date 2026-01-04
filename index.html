@@ -1494,6 +1494,17 @@
       let activeGift = null; // Only one gift at a time
       let giftCollected = false; // Track if gift has been collected
       let lastGiftSpawnDistance = 0; // Track distance when last gift was spawned
+      let collisionCheckCounter = 0; // Counter for mobile collision optimization
+      let animationFrameCounter = 0; // Counter for mobile animation optimization
+      let cleanupCounter = 0; // Counter for mobile cleanup optimization
+
+      // Reusable objects to prevent memory leaks (created once, reused every frame)
+      const _tempEuler = new THREE.Euler(0, 0, 0, "XYZ");
+      const _tempVec3 = new THREE.Vector3();
+
+      // Limit max active objects on mobile for better performance
+      const MAX_ACTIVE_OBSTACLES = isMobile() ? 20 : 50;
+      const MAX_ACTIVE_BARRIERS = isMobile() ? 10 : 30;
 
       // Detect mobile device
       function isMobile() {
@@ -1547,15 +1558,18 @@
             const newMat = new THREE.MeshLambertMaterial({
               map: oldMat.map,
               color: oldMat.color,
-              // Transfer alpha test if needed for transparency (leaves)
-              alphaTest: oldMat.alphaTest,
-              transparent: oldMat.transparent,
+              // PERFORMANCE SAVER: Force alphaTest to discard transparent pixels immediately
+              // 0.5 means "if it's more than 50% see-through, don't draw it at all"
+              alphaTest: 0.5,
+              // Force transparency OFF so the GPU treats it as a solid wall (faster)
+              transparent: false,
               side: oldMat.side,
             });
 
             // Dispose old material to free memory
             // oldMat.dispose(); // Optional: be careful if materials are shared
             child.material = newMat;
+            child.material.needsUpdate = true;
           }
         });
       }
@@ -1716,30 +1730,48 @@
 
         scene = new THREE.Scene();
         scene.background = new THREE.Color(CONFIG.fogColor);
-        scene.fog = new THREE.Fog(CONFIG.fogColor, 60, 120);
+
+        // Mobile performance optimizations
+        // 1. Detect device capability
+        const isMobileDevice = isMobile();
+
+        // Reduce draw distance on mobile (Desktop sees 300m, Mobile sees 110m)
+        // This reduces the number of visible trees by ~60%
+        const viewDistance = isMobileDevice ? 110 : 300;
+
+        // Adjust fog so objects fade out smoothly before cutting off
+        // Mobile fog starts at 30m and ends at 100m
+        const fogStart = isMobileDevice ? 30 : 60;
+        const fogEnd = isMobileDevice ? 100 : 120;
+        scene.fog = new THREE.Fog(CONFIG.fogColor, fogStart, fogEnd);
 
         camera = new THREE.PerspectiveCamera(
           camParams.fov,
           window.innerWidth / window.innerHeight,
           0.1,
-          300
+          viewDistance // Use reduced view distance on mobile
         );
         updateCamera();
 
-        // Mobile performance optimizations
-        const isMobileDevice = isMobile();
-        // Force 1.0 on mobile. It looks slightly less crisp but runs 2x faster.
-        const pixelRatio = isMobileDevice ? 1.0 : window.devicePixelRatio;
+        // 2. High-Performance / High-Quality Ratio
+        // On iPhone 13 (DPR 3), this limits us to 2.0 (crisp).
+        // On Desktop (DPR 1), it stays 1.0.
+        // We avoid 3.0 because it provides diminishing returns for huge battery cost.
+        const pixelRatio = Math.min(window.devicePixelRatio, 2.0);
 
         renderer = new THREE.WebGLRenderer({
-          antialias: true, // Keep antialiasing enabled for better visuals
+          // 3. Keep AA ON.
+          // The iPhone 13 Pro GPU is powerful enough to handle MSAA.
+          antialias: true,
           alpha: false,
           powerPreference: "high-performance",
         });
-        renderer.setPixelRatio(pixelRatio); // Limit pixel ratio on mobile
+
+        renderer.setPixelRatio(pixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
 
-        // Completely disable shadow maps on mobile
+        // 4. Keep Shadows OFF for mobile (This is the real performance saver)
+        // High resolution + No Shadows = Crisp look, smooth framerate.
         renderer.shadowMap.enabled = !isMobileDevice;
         if (!isMobileDevice) {
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -1785,6 +1817,12 @@
         worldSphere = new THREE.Mesh(sphereGeo, sphereMat);
         worldSphere.receiveShadow = !isMobile(); // Disable shadow receiving on mobile for performance
         scene.add(worldSphere);
+
+        // Spawn initial trees now that worldSphere is ready
+        // (in case tree model loaded before worldSphere was created)
+        if (treeModelTemplate) {
+          spawnInitialTrees();
+        }
 
         createPlayer();
 
@@ -2129,11 +2167,11 @@ fov: ${camParams.fov}
           const bone = skierBones[boneName];
           const params = boneParams[boneName];
 
-          // Create Euler rotation from individual axis rotations
-          const euler = new THREE.Euler(params.x, params.y, params.z, "XYZ");
+          // Use reusable Euler object instead of creating new one every frame
+          _tempEuler.set(params.x, params.y, params.z);
 
           // Apply rotation (using quaternion for better bone manipulation)
-          bone.quaternion.setFromEuler(euler);
+          bone.quaternion.setFromEuler(_tempEuler);
 
           // Update skeleton if it exists
           if (
@@ -2373,6 +2411,10 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function placeOnSphere(obj, angleRad, xOffset) {
+        if (!worldSphere) {
+          console.warn("worldSphere not initialized yet, skipping placement");
+          return;
+        }
         const R = CONFIG.worldRadius;
         const y = R * Math.cos(angleRad);
         const z = R * Math.sin(angleRad);
@@ -2413,8 +2455,10 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
             treeModelTemplate = gltf.scene;
             optimizeModelForMobile(treeModelTemplate); // Optimize for mobile
             console.log("Alpine tree model loaded successfully");
-            // Spawn initial trees after model is loaded
-            spawnInitialTrees();
+            // Spawn initial trees after model is loaded (only if worldSphere is ready)
+            if (worldSphere) {
+              spawnInitialTrees();
+            }
             assetLoadingState.tree = true;
             updateLoadingProgress();
             checkAllAssetsLoaded();
@@ -2576,6 +2620,13 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function spawnInitialTrees() {
+        // Only spawn if worldSphere is initialized
+        if (!worldSphere) {
+          console.warn(
+            "worldSphere not initialized yet, deferring initial tree spawn"
+          );
+          return;
+        }
         // Initial Objects
         // Spawn ahead of player so they are visible immediately
         for (let i = 0; i < 30; i++) {
@@ -2912,13 +2963,12 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
 
         // Check obstacles at this angle
         activeObstacles.forEach((obj) => {
-          const oPos = new THREE.Vector3();
-          obj.mesh.getWorldPosition(oPos);
+          obj.mesh.getWorldPosition(_tempVec3); // Reuse vector
           // Check if obstacle is near this angle
           const angleDiff = Math.abs(obj.angle - angle);
           if (angleDiff < 0.1) {
             // Determine which lane this obstacle is in
-            const lane = Math.round(oPos.x / CONFIG.laneWidth);
+            const lane = Math.round(_tempVec3.x / CONFIG.laneWidth);
             if (lane >= -1 && lane <= 1) {
               occupiedLanes.add(lane);
             }
@@ -2927,11 +2977,10 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
 
         // Check barriers at this angle
         activeBarriers.forEach((obj) => {
-          const oPos = new THREE.Vector3();
-          obj.mesh.getWorldPosition(oPos);
+          obj.mesh.getWorldPosition(_tempVec3); // Reuse vector
           const angleDiff = Math.abs(obj.angle - angle);
           if (angleDiff < 0.1) {
-            const lane = Math.round(oPos.x / CONFIG.laneWidth);
+            const lane = Math.round(_tempVec3.x / CONFIG.laneWidth);
             if (lane >= -1 && lane <= 1) {
               occupiedLanes.add(lane);
             }
@@ -3045,8 +3094,13 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         }
 
         // Update subtle bone animations (only if not paused)
+        // Reduce animation update frequency on mobile (every other frame)
         if (!isPaused) {
-          updateSubtleAnimations(delta);
+          const isMobileDevice = isMobile();
+          if (!isMobileDevice || animationFrameCounter % 2 === 0) {
+            updateSubtleAnimations(delta);
+          }
+          if (isMobileDevice) animationFrameCounter++;
         }
 
         // Update jump animation (only if not paused)
@@ -3135,12 +3189,15 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         }
 
         // Spawn Obstacles (only if game is active and not paused)
-        // Note: totalRotation is now calculated in animate loop, so we need to recalculate here
+        // Reduce spawn frequency on mobile for better performance
+        const spawnInterval = isMobile()
+          ? CONFIG.spawnInterval * 1.3 // 30% less frequent spawning
+          : CONFIG.spawnInterval;
         const totalRotationForSpawn = -worldSphere.rotation.x;
         if (
           gameActive &&
           !isPaused &&
-          totalRotationForSpawn - lastSpawnRotation > CONFIG.spawnInterval
+          totalRotationForSpawn - lastSpawnRotation > spawnInterval
         ) {
           // FIXED SPAWN ANGLE: 0.5 is closer to camera than 1.5.
           // 1.5 was spawning behind the new cleanup threshold.
@@ -3200,16 +3257,22 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function cleanupObjects() {
+        // On mobile, reduce cleanup frequency (every 3 frames instead of every frame)
+        const isMobileDevice = isMobile();
+        if (isMobileDevice) {
+          cleanupCounter++;
+          if (cleanupCounter % 3 !== 0) return; // Skip cleanup 2 out of 3 frames on mobile
+        }
+
         // FIXED CLEANUP: Only remove when they go over horizon (Z < -60)
         const cleanupList = [activeObstacles, activeBarriers, activeBoundaries];
 
         cleanupList.forEach((list) => {
           for (let i = list.length - 1; i >= 0; i--) {
             const obj = list[i];
-            const oPos = new THREE.Vector3();
-            obj.mesh.getWorldPosition(oPos);
+            obj.mesh.getWorldPosition(_tempVec3); // Reuse vector
 
-            if (oPos.z < -60) {
+            if (_tempVec3.z < -60) {
               worldSphere.remove(obj.mesh);
               list.splice(i, 1);
             }
@@ -3218,26 +3281,55 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
 
         // Cleanup gift if it goes over horizon
         if (activeGift) {
-          const gPos = new THREE.Vector3();
-          activeGift.mesh.getWorldPosition(gPos);
-          if (gPos.z < -60) {
+          activeGift.mesh.getWorldPosition(_tempVec3); // Reuse vector
+          if (_tempVec3.z < -60) {
             worldSphere.remove(activeGift.mesh);
             activeGift = null;
+          }
+        }
+
+        // Limit max active objects on mobile
+        if (isMobileDevice) {
+          // Remove oldest obstacles if over limit
+          while (activeObstacles.length > MAX_ACTIVE_OBSTACLES) {
+            const obj = activeObstacles.shift();
+            if (obj && obj.mesh && obj.mesh.parent) {
+              obj.mesh.parent.remove(obj.mesh);
+            }
+          }
+          // Remove oldest barriers if over limit
+          while (activeBarriers.length > MAX_ACTIVE_BARRIERS) {
+            const obj = activeBarriers.shift();
+            if (obj && obj.mesh && obj.mesh.parent) {
+              obj.mesh.parent.remove(obj.mesh);
+            }
           }
         }
       }
 
       function checkCollisions() {
-        const pPos = new THREE.Vector3();
-        player.getWorldPosition(pPos);
+        // Use reusable vector instead of creating new one every frame
+        player.getWorldPosition(_tempVec3);
+        const pX = _tempVec3.x;
+        const pZ = _tempVec3.z;
+
+        // On mobile, reduce collision check frequency (check every other frame)
+        const isMobileDevice = isMobile();
+        if (isMobileDevice) {
+          collisionCheckCounter++;
+          if (collisionCheckCounter % 2 === 0) return; // Skip every other frame on mobile
+        }
 
         // Gift collision (non-lethal)
         if (activeGift && !giftCollected) {
-          const gPos = new THREE.Vector3();
-          activeGift.mesh.getWorldPosition(gPos);
+          activeGift.mesh.getWorldPosition(_tempVec3); // Reuse vector
 
-          if (Math.abs(gPos.z - pPos.z) < 1.5) {
-            if (Math.abs(gPos.x - pPos.x) < 1.5) {
+          // Early exit if gift is too far away
+          const zDiff = Math.abs(_tempVec3.z - pZ);
+          if (zDiff > 3.0) return; // Skip if too far
+
+          if (zDiff < 1.5) {
+            if (Math.abs(_tempVec3.x - pX) < 1.5) {
               // Gift collected!
               playSound("twinkle");
               giftCollected = true;
@@ -3251,27 +3343,50 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           }
         }
 
-        // Trees
-        for (let i = activeObstacles.length - 1; i >= 0; i--) {
-          const obj = activeObstacles[i];
-          const oPos = new THREE.Vector3();
-          obj.mesh.getWorldPosition(oPos);
+        // Trees - limit checks to nearby objects on mobile
+        const maxObstacleChecks = isMobileDevice
+          ? Math.min(activeObstacles.length, 10) // Only check closest 10 on mobile
+          : activeObstacles.length;
 
-          if (Math.abs(oPos.z - pPos.z) < 1.5) {
-            if (Math.abs(oPos.x - pPos.x) < 1.5) {
+        for (
+          let i = activeObstacles.length - 1;
+          i >= activeObstacles.length - maxObstacleChecks;
+          i--
+        ) {
+          const obj = activeObstacles[i];
+          obj.mesh.getWorldPosition(_tempVec3); // Reuse vector
+
+          // Early exit if object is too far away
+          const zDiff = Math.abs(_tempVec3.z - pZ);
+          if (zDiff > 3.0) continue; // Skip if too far
+
+          if (zDiff < 1.5) {
+            if (Math.abs(_tempVec3.x - pX) < 1.5) {
               triggerCrash();
+              break; // Stop checking after collision
             }
           }
         }
 
-        // Barriers
-        for (let i = activeBarriers.length - 1; i >= 0; i--) {
-          const obj = activeBarriers[i];
-          const oPos = new THREE.Vector3();
-          obj.mesh.getWorldPosition(oPos);
+        // Barriers - limit checks on mobile
+        const maxBarrierChecks = isMobileDevice
+          ? Math.min(activeBarriers.length, 5) // Only check closest 5 on mobile
+          : activeBarriers.length;
 
-          if (!obj.passed && Math.abs(oPos.z - pPos.z) < 1.0) {
-            if (Math.abs(oPos.x - pPos.x) < 2.0) {
+        for (
+          let i = activeBarriers.length - 1;
+          i >= activeBarriers.length - maxBarrierChecks;
+          i--
+        ) {
+          const obj = activeBarriers[i];
+          obj.mesh.getWorldPosition(_tempVec3); // Reuse vector
+
+          // Early exit if barrier is too far away
+          const zDiff = Math.abs(_tempVec3.z - pZ);
+          if (zDiff > 2.5) continue; // Skip if too far
+
+          if (!obj.passed && zDiff < 1.0) {
+            if (Math.abs(_tempVec3.x - pX) < 2.0) {
               // Easier to jump over: > 1.0 height required
               if (playerHeight > 1.0) {
                 obj.passed = true;
@@ -3280,6 +3395,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
               } else {
                 triggerCrash();
               }
+              break; // Stop checking after collision
             }
           }
         }
