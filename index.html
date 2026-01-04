@@ -2554,7 +2554,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         });
 
         // Randomize scale - small variation (rocks should be smaller than trees)
-        const baseScale = 3.0; // Smaller than trees (trees are 5.0-8.0)
+        const baseScale = 2.0; // Smaller than trees (trees are 5.0-8.0)
         const scaleVariation = 0.6 + Math.random() * 0.4; // 0.6 to 1.0 variation
         const scale = baseScale * scaleVariation;
         rock.scale.set(scale, scale, scale);
@@ -2644,7 +2644,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         });
 
         // Scale up the sign
-        const scale = 2.5;
+        const scale = 1.5;
         sign.scale.set(scale, scale, scale);
 
         // Raise the sign so it's flush with the ground (not buried)
@@ -2678,7 +2678,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         });
 
         // Scale up the fence
-        const scale = 5.5;
+        const scale = 3.25;
         fence.scale.set(scale, scale, scale);
 
         return fence;
@@ -2777,7 +2777,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         });
 
         // Set scale for gift
-        const scale = 2.0;
+        const scale = 1.25;
         gift.scale.set(scale, scale, scale);
 
         return gift;
