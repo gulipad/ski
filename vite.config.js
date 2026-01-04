@@ -6,4 +6,21 @@ export default defineConfig({
   build: {
     outDir: "dist",
   },
+  server: {
+    // Handle /pose-generator route in dev server
+    middlewareMode: false,
+  },
+  plugins: [
+    {
+      name: "pose-generator-rewrite",
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url === "/pose-generator" || req.url === "/pose-generator/") {
+            req.url = "/pose-editor.html";
+          }
+          next();
+        });
+      },
+    },
+  ],
 });

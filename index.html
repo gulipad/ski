@@ -1765,6 +1765,10 @@
         score = 0;
         document.getElementById("score").innerText = "0";
 
+        // Reset lives for new game
+        lives = 3;
+        updateLivesDisplay();
+
         // Start the game
         gameActive = true;
         gameStarted = true;
@@ -1817,6 +1821,10 @@
         gameStarted = false;
         isGameOver = false;
         isPaused = false;
+
+        // Reset lives for next game
+        lives = 3;
+        updateLivesDisplay();
 
         // Stop all audio
         audio.stopAll();
