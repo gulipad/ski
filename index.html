@@ -6,7 +6,10 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
-    <title>Alpine Rush: Pro Edition</title>
+    <title>Alpine Ana</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#87ceeb" />
+    <link rel="apple-touch-icon" href="/assets/icon-192.png" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
@@ -720,7 +723,7 @@
         <img
           id="title-image"
           src="/assets/images/title.webp"
-          alt="Alpine Rush"
+          alt="Alpine Ana"
         />
         <img id="character-image" src="/assets/images/ana.webp" alt="Ana" />
         <button id="start-button">Start Game</button>
@@ -1167,80 +1170,67 @@
         setCookie("sfxEnabled", sfxEnabled);
       }
 
-      // Initialize audio
+      // Audio Pooling Configuration
+      const SOUND_POOL_SIZE = 5; // How many copies of EACH sound to keep ready
+
+      // Global Sound Pool
+      const audioPool = {};
+
+      // Register sounds to load
+      const soundManifest = {
+        jump: "/assets/audio/jump.mp3",
+        crash: "/assets/audio/crash.mp3",
+        leftTurn: "/assets/audio/turn.mp3",
+        rightTurn: "/assets/audio/turn.mp3", // Same file
+        ouch3: "/assets/audio/ouch_3.mp3",
+        thump: "/assets/audio/thump.mp3",
+        ohNo: "/assets/audio/oh_no.mp3",
+        twinkle: "/assets/audio/twinkle.mp3",
+      };
+
+      // Helper to maintain your specific volumes
+      function getVolumeForKey(key) {
+        const volumes = {
+          jump: 0.6,
+          crash: 0.7,
+          leftTurn: 0.4,
+          rightTurn: 0.4,
+          ouch3: 0.7,
+          thump: 0.6,
+          ohNo: 0.7,
+          twinkle: 0.8,
+        };
+        return volumes[key] || 0.5;
+      }
+
+      // Initialize audio with pooling system
       function initAudio() {
         if (audioInitialized) return; // Prevent double initialization
 
-        // Background music
+        // 1. Initialize Music & Ambient (Keep as single instances)
         backgroundMusic = new Audio("/assets/audio/music.mp3");
         backgroundMusic.loop = true;
         backgroundMusic.volume = 0.5;
         backgroundMusic.preload = "auto";
 
-        // Ambient snow sliding sound
         ambientSound = new Audio("/assets/audio/snow-sliding.mp3");
         ambientSound.loop = true;
         ambientSound.volume = ambientSoundBaseVolume;
         ambientSound.preload = "auto";
 
-        // Sound effects - preload and unlock for mobile
-        soundEffects.jump = new Audio("/assets/audio/jump.mp3");
-        soundEffects.jump.volume = 0.6;
-        soundEffects.jump.preload = "auto";
+        // 2. Initialize the Sound Pool
+        // We pre-load multiple copies of every sound effect so they are waiting in memory.
+        for (const [key, src] of Object.entries(soundManifest)) {
+          audioPool[key] = [];
+          for (let i = 0; i < SOUND_POOL_SIZE; i++) {
+            const audio = new Audio(src);
+            audio.volume = getVolumeForKey(key); // Helper to set volume
 
-        soundEffects.crash = new Audio("/assets/audio/crash.mp3");
-        soundEffects.crash.volume = 0.7;
-        soundEffects.crash.preload = "auto";
+            // CRITICAL FOR MOBILE: Force the browser to buffer the metadata
+            audio.load();
 
-        soundEffects.leftTurn = new Audio("/assets/audio/turn.mp3");
-        soundEffects.leftTurn.volume = 0.4;
-        soundEffects.leftTurn.preload = "auto";
-
-        soundEffects.rightTurn = new Audio("/assets/audio/turn.mp3");
-        soundEffects.rightTurn.volume = 0.4;
-        soundEffects.rightTurn.preload = "auto";
-
-        soundEffects.ouch3 = new Audio("/assets/audio/ouch_3.mp3");
-        soundEffects.ouch3.volume = 0.7;
-        soundEffects.ouch3.preload = "auto";
-
-        soundEffects.thump = new Audio("/assets/audio/thump.mp3");
-        soundEffects.thump.volume = 0.6;
-        soundEffects.thump.preload = "auto";
-
-        soundEffects.ohNo = new Audio("/assets/audio/oh_no.mp3");
-        soundEffects.ohNo.volume = 0.7;
-        soundEffects.ohNo.preload = "auto";
-
-        soundEffects.twinkle = new Audio("/assets/audio/twinkle.mp3");
-        soundEffects.twinkle.volume = 0.8;
-        soundEffects.twinkle.preload = "auto";
-
-        // Unlock audio on mobile by playing and immediately pausing (required for iOS/Safari)
-        if (isMobile()) {
-          const unlockAudio = () => {
-            const unlockPromises = Object.values(soundEffects).map((audio) => {
-              if (audio) {
-                const promise = audio.play();
-                if (promise !== undefined) {
-                  return promise
-                    .then(() => {
-                      audio.pause();
-                      audio.currentTime = 0;
-                    })
-                    .catch(() => {
-                      // Ignore errors during unlock
-                    });
-                }
-              }
-              return Promise.resolve();
-            });
-            Promise.all(unlockPromises).catch(() => {
-              // Ignore errors
-            });
-          };
-          // Unlock immediately if audio context is available
-          unlockAudio();
+            audioPool[key].push(audio);
+          }
         }
 
         // Start music if enabled
@@ -1282,52 +1272,32 @@
       }
 
       // Play sound effect
+      // Play sound effect using audio pool
       function playSound(soundName) {
-        if (!sfxEnabled || !soundEffects[soundName]) return;
+        if (!sfxEnabled || !audioPool[soundName]) return;
 
         // Ensure audio is initialized before playing sounds (important for mobile)
         if (!audioInitialized) {
           initAudio();
         }
 
-        const sourceAudio = soundEffects[soundName];
-        if (!sourceAudio) return;
+        // 1. Find the first "free" player in the pool
+        const pool = audioPool[soundName];
+        let player = pool.find((p) => p.paused);
 
-        // On mobile, clone and play with better error handling
-        const sound = sourceAudio.cloneNode();
-        sound.volume = sourceAudio.volume;
-
-        // Reset to start for consistent playback
-        sound.currentTime = 0;
-
-        // Play with promise handling for mobile compatibility
-        const playPromise = sound.play();
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              // Success - sound is playing
-            })
-            .catch((err) => {
-              // On mobile, if clone fails, try playing the original (one-time fallback)
-              if (isMobile() && sourceAudio.readyState >= 2) {
-                try {
-                  sourceAudio.currentTime = 0;
-                  sourceAudio.play().catch(() => {
-                    // If both fail, silently ignore (mobile restriction)
-                  });
-                } catch (e) {
-                  // Ignore errors
-                }
-              }
-            });
-        } else {
-          // Fallback for older browsers
-          try {
-            sound.play();
-          } catch (e) {
-            // Ignore errors
-          }
+        // 2. If all players are busy, steal the first one (cut it off)
+        // This ensures the NEW sound (e.g., the second crash) is always heard.
+        if (!player) {
+          player = pool[0];
+          player.currentTime = 0; // Reset to start
         }
+
+        // 3. Play immediately
+        player.play().catch((err) => {
+          // Mobile browsers sometimes reject plays if not triggered by user interaction.
+          // There is little we can do about this specific error, but pooling minimizes it.
+          // console.warn("Audio play blocked", err);
+        });
       }
 
       // Camera controls visibility state
@@ -1501,6 +1471,12 @@
       // Reusable objects to prevent memory leaks (created once, reused every frame)
       const _tempEuler = new THREE.Euler(0, 0, 0, "XYZ");
       const _tempVec3 = new THREE.Vector3();
+
+      // Object pools for reusing objects instead of creating/destroying them
+      const treePool = [];
+      const rockPool = [];
+      const fencePool = [];
+      const signPool = [];
 
       // Limit max active objects on mobile for better performance
       const MAX_ACTIVE_OBSTACLES = isMobile() ? 20 : 50;
@@ -1688,6 +1664,20 @@
           startButton.textContent = "Loading Assets... 0%";
           startButton.addEventListener("click", () => {
             if (!startButton.disabled) {
+              // iOS Audio Unlock: Warm up the audio engine
+              if (!audioInitialized) {
+                initAudio();
+
+                // TRICK: Play and immediately pause every sound type once
+                // This "warms up" the iOS audio engine for these specific files
+                Object.keys(audioPool).forEach((key) => {
+                  const p = audioPool[key][0];
+                  p.play()
+                    .then(() => p.pause())
+                    .catch(() => {});
+                });
+              }
+
               startGame();
             }
           });
@@ -2637,15 +2627,22 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         }
       }
 
-      function createTree(isDecoration = false) {
+      function createTree(isDecoration = false, reuseFromPool = true) {
         if (!treeModelTemplate) {
           // Model not loaded yet - return null to skip spawning
           console.warn("Tree model not loaded yet, skipping tree creation");
           return null;
         }
 
-        // Clone the GLB model
-        const tree = treeModelTemplate.clone();
+        // Try to reuse from pool first (object pooling optimization)
+        let tree = null;
+        if (reuseFromPool && treePool.length > 0) {
+          tree = treePool.pop();
+          tree.visible = true; // Make it visible again
+        } else {
+          // Clone the GLB model only if pool is empty
+          tree = treeModelTemplate.clone();
+        }
 
         // Enable shadows on all meshes (disable on mobile for performance)
         const enableShadows = !isMobile();
@@ -2670,10 +2667,14 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function spawnTree(angle, isDecoration = false, laneIndex = 0) {
-        const tree = createTree(isDecoration);
+        const tree = createTree(isDecoration, true);
 
         // Skip if model not loaded yet
         if (!tree) return;
+
+        // Reset tree properties (important when reusing from pool)
+        // Scale and rotation will be set below, but ensure it's visible
+        tree.visible = true;
 
         let xPos;
         if (isDecoration) {
@@ -2702,15 +2703,22 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         activeObstacles.push({ mesh: tree, angle: angle });
       }
 
-      function createRock() {
+      function createRock(reuseFromPool = true) {
         if (!rockModelTemplate) {
           // Model not loaded yet - return null to skip spawning
           console.warn("Rock model not loaded yet, skipping rock creation");
           return null;
         }
 
-        // Clone the GLB model
-        const rock = rockModelTemplate.clone();
+        // Try to reuse from pool first (object pooling optimization)
+        let rock = null;
+        if (reuseFromPool && rockPool.length > 0) {
+          rock = rockPool.pop();
+          rock.visible = true; // Make it visible again
+        } else {
+          // Clone the GLB model only if pool is empty
+          rock = rockModelTemplate.clone();
+        }
 
         // Enable shadows on all meshes (disable on mobile for performance)
         const enableShadows = !isMobile();
@@ -2739,7 +2747,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function spawnBarrier(angle, laneIndex) {
-        const rock = createRock();
+        const rock = createRock(true);
 
         // Skip if model not loaded yet
         if (!rock) return;
@@ -2775,7 +2783,11 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         if (isFence) {
           leftObj.position.y += 0; // Adjust this value to raise/lower the fence
         }
-        activeBoundaries.push({ mesh: leftObj });
+        activeBoundaries.push({
+          mesh: leftObj,
+          angle: angle,
+          type: isFence ? "fence" : "sign",
+        });
 
         const rightObj = createBoundaryObject(isFence, false);
         placeOnSphere(rightObj, angle, 9);
@@ -2783,7 +2795,11 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         if (isFence) {
           rightObj.position.y += 0; // Adjust this value to raise/lower the fence
         }
-        activeBoundaries.push({ mesh: rightObj });
+        activeBoundaries.push({
+          mesh: rightObj,
+          angle: angle,
+          type: isFence ? "fence" : "sign",
+        });
       }
 
       function createSign() {
@@ -2917,9 +2933,9 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           spawnBarrier(angle, lanes[1]);
         }
         // Spawn decoration tree further out (not in lanes)
-        // Reduce spawn rate by 30% on mobile (70% chance)
+        // Reduce spawn rate by 15% on mobile (85% chance) - less reduction for better visuals
         const shouldSpawnDecorationTree = isMobile()
-          ? Math.random() < 0.7
+          ? Math.random() < 0.85
           : true;
         if (shouldSpawnDecorationTree) {
           spawnTree(angle, true);
@@ -3189,10 +3205,8 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         }
 
         // Spawn Obstacles (only if game is active and not paused)
-        // Reduce spawn frequency on mobile for better performance
-        const spawnInterval = isMobile()
-          ? CONFIG.spawnInterval * 1.3 // 30% less frequent spawning
-          : CONFIG.spawnInterval;
+        // Keep same spawn rate on mobile to maintain game difficulty
+        const spawnInterval = CONFIG.spawnInterval;
         const totalRotationForSpawn = -worldSphere.rotation.x;
         if (
           gameActive &&
@@ -3207,9 +3221,9 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         }
 
         // Spawn Boundaries (only if game is active and not paused)
-        // Reduce spawn rate by 30% on mobile (increase interval by ~43%)
+        // Reduce spawn rate by 15% on mobile (increase interval by ~18%) - less reduction for better visuals
         const boundaryInterval = isMobile()
-          ? CONFIG.boundaryInterval * 1.43 // 30% reduction = 1/0.7 ≈ 1.43x interval
+          ? CONFIG.boundaryInterval * 1.18 // 15% reduction = 1/0.85 ≈ 1.18x interval
           : CONFIG.boundaryInterval;
         if (
           gameActive &&
@@ -3267,23 +3281,55 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         // FIXED CLEANUP: Only remove when they go over horizon (Z < -60)
         const cleanupList = [activeObstacles, activeBarriers, activeBoundaries];
 
-        cleanupList.forEach((list) => {
+        // Object pooling: Instead of removing objects, hide them and add to pool
+        cleanupList.forEach((list, listIndex) => {
           for (let i = list.length - 1; i >= 0; i--) {
             const obj = list[i];
-            obj.mesh.getWorldPosition(_tempVec3); // Reuse vector
+            // Use angle-based check instead of getWorldPosition (faster!)
+            // Objects behind player have angle < currentWorldAngle - threshold
+            const currentWorldAngle = -worldSphere.rotation.x;
+            const angleDiff = currentWorldAngle - obj.angle;
 
-            if (_tempVec3.z < -60) {
-              worldSphere.remove(obj.mesh);
+            // If object is more than 1.5 radians behind player, pool it
+            if (angleDiff > 1.5) {
+              // Hide object and add to appropriate pool
+              obj.mesh.visible = false;
+
+              // Determine which pool to use based on list type
+              if (listIndex === 0) {
+                // activeObstacles (trees)
+                treePool.push(obj.mesh);
+              } else if (listIndex === 1) {
+                // activeBarriers (rocks)
+                rockPool.push(obj.mesh);
+              } else if (listIndex === 2) {
+                // activeBoundaries (fences/signs)
+                // Store type in the object if available, otherwise guess from mesh
+                if (obj.type === "fence") {
+                  fencePool.push(obj.mesh);
+                } else if (obj.type === "sign") {
+                  signPool.push(obj.mesh);
+                } else {
+                  // Fallback: guess from mesh structure
+                  if (obj.mesh.children && obj.mesh.children.length > 0) {
+                    fencePool.push(obj.mesh);
+                  } else {
+                    signPool.push(obj.mesh);
+                  }
+                }
+              }
+
               list.splice(i, 1);
             }
           }
         });
 
-        // Cleanup gift if it goes over horizon
+        // Cleanup gift if it goes over horizon (angle-based check)
         if (activeGift) {
-          activeGift.mesh.getWorldPosition(_tempVec3); // Reuse vector
-          if (_tempVec3.z < -60) {
-            worldSphere.remove(activeGift.mesh);
+          const currentWorldAngle = -worldSphere.rotation.x;
+          const angleDiff = currentWorldAngle - activeGift.angle;
+          if (angleDiff > 1.5) {
+            activeGift.mesh.visible = false;
             activeGift = null;
           }
         }
@@ -3308,11 +3354,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       }
 
       function checkCollisions() {
-        // Use reusable vector instead of creating new one every frame
-        player.getWorldPosition(_tempVec3);
-        const pX = _tempVec3.x;
-        const pZ = _tempVec3.z;
-
         // On mobile, reduce collision check frequency (check every other frame)
         const isMobileDevice = isMobile();
         if (isMobileDevice) {
@@ -3320,15 +3361,23 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           if (collisionCheckCounter % 2 === 0) return; // Skip every other frame on mobile
         }
 
-        // Gift collision (non-lethal)
+        // Get player angle (angle-based collision detection - much faster!)
+        const playerAngle = -worldSphere.rotation.x;
+        player.getWorldPosition(_tempVec3);
+        const pX = _tempVec3.x;
+
+        // Gift collision (non-lethal) - use angle-based check
         if (activeGift && !giftCollected) {
-          activeGift.mesh.getWorldPosition(_tempVec3); // Reuse vector
+          // Compare angles directly (no 3D vector math needed!)
+          const angleDiff = Math.abs(playerAngle - activeGift.angle);
 
-          // Early exit if gift is too far away
-          const zDiff = Math.abs(_tempVec3.z - pZ);
-          if (zDiff > 3.0) return; // Skip if too far
+          // Early exit if gift is too far away (angle difference > ~0.15 radians ≈ 8.6 degrees)
+          if (angleDiff > 0.15) return; // Skip if too far
 
-          if (zDiff < 1.5) {
+          // If close enough in angle, check X position
+          if (angleDiff < 0.08) {
+            // ~4.6 degrees
+            activeGift.mesh.getWorldPosition(_tempVec3);
             if (Math.abs(_tempVec3.x - pX) < 1.5) {
               // Gift collected!
               playSound("twinkle");
@@ -3354,13 +3403,23 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           i--
         ) {
           const obj = activeObstacles[i];
-          obj.mesh.getWorldPosition(_tempVec3); // Reuse vector
 
-          // Early exit if object is too far away
-          const zDiff = Math.abs(_tempVec3.z - pZ);
-          if (zDiff > 3.0) continue; // Skip if too far
+          // Angle-based early exit (much faster than getWorldPosition!)
+          // Only check trees that are ahead of player's position (not behind)
+          const angleDiff = playerAngle - obj.angle; // Positive = tree is ahead, negative = tree is behind
 
-          if (zDiff < 1.5) {
+          // Aggressively skip trees that are behind or at the player (already passed)
+          // Use strict threshold to prevent collisions when moving backward
+          if (angleDiff <= 0.02) continue; // Tree is at or behind player (with small buffer), skip it completely
+
+          // Early exit if tree is too far ahead (angle difference > ~0.08 radians ≈ 4.6 degrees)
+          if (angleDiff > 0.08) continue; // Skip if too far ahead
+
+          // Only check X position if tree is clearly ahead and very close (within 0.03 radians ≈ 1.7 degrees)
+          // Very tight window to ensure tree is clearly ahead and prevent backward collisions
+          // The tree's collision point might be slightly behind its angle, so we need a buffer
+          if (angleDiff > 0.02 && angleDiff < 0.03) {
+            obj.mesh.getWorldPosition(_tempVec3);
             if (Math.abs(_tempVec3.x - pX) < 1.5) {
               triggerCrash();
               break; // Stop checking after collision
@@ -3379,13 +3438,21 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           i--
         ) {
           const obj = activeBarriers[i];
-          obj.mesh.getWorldPosition(_tempVec3); // Reuse vector
 
-          // Early exit if barrier is too far away
-          const zDiff = Math.abs(_tempVec3.z - pZ);
-          if (zDiff > 2.5) continue; // Skip if too far
+          // Angle-based early exit (much faster than getWorldPosition!)
+          // For rocks, check slightly later (wider threshold) to give more time to jump
+          const angleDiff = playerAngle - obj.angle; // Positive = barrier is ahead
 
-          if (!obj.passed && zDiff < 1.0) {
+          // Skip barriers that are behind the player (already passed)
+          if (angleDiff < -0.05) continue; // Barrier is behind, skip it
+
+          // Early exit if barrier is too far ahead (angle difference > ~0.1 radians ≈ 5.7 degrees)
+          if (angleDiff > 0.1) continue; // Skip if too far ahead
+
+          // Only check X position when barrier is very close (within 0.03 radians ≈ 1.7 degrees)
+          // This gives player more time to jump before collision check
+          if (!obj.passed && angleDiff >= -0.02 && angleDiff < 0.03) {
+            obj.mesh.getWorldPosition(_tempVec3);
             if (Math.abs(_tempVec3.x - pX) < 2.0) {
               // Easier to jump over: > 1.0 height required
               if (playerHeight > 1.0) {
