@@ -2751,6 +2751,17 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
             assetLoadingState.redSign = true;
             updateLoadingProgress();
             checkAllAssetsLoaded();
+
+            // When red sign loads, check if all boundary instancers are ready
+            // If so, spawn initial boundaries immediately
+            if (
+              worldSphere &&
+              fenceInstances &&
+              redSignInstances &&
+              blueSignInstances
+            ) {
+              spawnInitialBoundariesIfNeeded();
+            }
           },
           (xhr) => {
             console.log(
@@ -2792,6 +2803,17 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
             assetLoadingState.blueSign = true;
             updateLoadingProgress();
             checkAllAssetsLoaded();
+
+            // When blue sign loads, check if all boundary instancers are ready
+            // If so, spawn initial boundaries immediately
+            if (
+              worldSphere &&
+              fenceInstances &&
+              redSignInstances &&
+              blueSignInstances
+            ) {
+              spawnInitialBoundariesIfNeeded();
+            }
           },
           (xhr) => {
             console.log(
@@ -2835,6 +2857,17 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
             assetLoadingState.fence = true;
             updateLoadingProgress();
             checkAllAssetsLoaded();
+
+            // When fence loads, check if all boundary instancers are ready
+            // If so, spawn initial boundaries immediately
+            if (
+              worldSphere &&
+              fenceInstances &&
+              redSignInstances &&
+              blueSignInstances
+            ) {
+              spawnInitialBoundariesIfNeeded();
+            }
           },
           (xhr) => {
             console.log(
@@ -2886,9 +2919,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           );
           return;
         }
-        // Only spawn boundaries if instancers are ready
-        const boundariesReady =
-          fenceInstances && redSignInstances && blueSignInstances;
 
         // Initial Objects
         // Spawn ahead of player so they are visible immediately
@@ -2896,10 +2926,50 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           // Spawn angle: 0.5 down to -1.0 (covering visible range)
           let angle = 0.5 - i * 0.05;
           spawnTree(angle, true);
-          // Only spawn boundaries if instancers are ready
-          if (boundariesReady) {
-            spawnBoundary(angle);
+          // Try to spawn boundaries - if instancers aren't ready, they'll be spawned later
+          spawnBoundary(angle);
+        }
+      }
+
+      // Spawn initial boundaries if they weren't ready when spawnInitialTrees() was called
+      function spawnInitialBoundariesIfNeeded() {
+        if (!worldSphere) return;
+
+        const boundariesReady =
+          fenceInstances && redSignInstances && blueSignInstances;
+        if (!boundariesReady) return;
+
+        // Check if boundaries already exist in the initial area (angles from -1.0 to 0.5)
+        // Use a more lenient check - if we have fewer than 30 boundaries in range, spawn them
+        const boundariesInRange = activeBoundaries.filter(
+          (b) => b.angle >= -1.0 && b.angle <= 0.5
+        );
+
+        // If we don't have enough boundaries in the initial area, spawn them
+        // This handles the case where some boundaries were spawned but not all
+        if (boundariesInRange.length < 30) {
+          // Reset boundaryAlternator to start fresh pattern (important!)
+          // This ensures boundaries spawn with the correct fence/sign pattern
+          boundaryAlternator = 0;
+
+          for (let i = 0; i < 30; i++) {
+            const angle = 0.5 - i * 0.05;
+            // Only spawn if boundary doesn't already exist at this angle
+            const exists = activeBoundaries.some(
+              (b) => Math.abs(b.angle - angle) < 0.01
+            );
+            if (!exists) {
+              spawnBoundary(angle);
+            }
           }
+
+          // Update instance matrices after batch spawn - CRITICAL for visibility
+          // This ensures boundaries are visible immediately
+          if (fenceInstances) fenceInstances.instanceMatrix.needsUpdate = true;
+          if (redSignInstances)
+            redSignInstances.instanceMatrix.needsUpdate = true;
+          if (blueSignInstances)
+            blueSignInstances.instanceMatrix.needsUpdate = true;
         }
       }
 
@@ -4158,31 +4228,10 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         lastGiftSpawnDistance = 0;
 
         // Spawn initial trees and boundaries for new game
-        // Ensure boundaries spawn even if they weren't ready initially
         spawnInitialTrees();
 
-        // If boundaries weren't ready during initial spawn, spawn them now
-        // This handles the case where models load after game start
-        if (fenceInstances && redSignInstances && blueSignInstances) {
-          // Spawn boundaries ahead of player to fill the gap
-          const currentAngle = -worldSphere.rotation.x;
-          for (let i = 0; i < 30; i++) {
-            const angle = currentAngle + 0.5 - i * 0.05;
-            // Only spawn if not already spawned (check if boundary exists at this angle)
-            const existingBoundary = activeBoundaries.find(
-              (b) => Math.abs(b.angle - angle) < 0.01
-            );
-            if (!existingBoundary) {
-              spawnBoundary(angle);
-            }
-          }
-          // Update instance matrices after batch spawn
-          if (fenceInstances) fenceInstances.instanceMatrix.needsUpdate = true;
-          if (redSignInstances)
-            redSignInstances.instanceMatrix.needsUpdate = true;
-          if (blueSignInstances)
-            blueSignInstances.instanceMatrix.needsUpdate = true;
-        }
+        // Ensure boundaries spawn if they weren't ready during initial spawn
+        spawnInitialBoundariesIfNeeded();
 
         // FINALLY: Set gameActive to true AFTER everything is reset
         // This prevents score accumulation during the reset process
