@@ -989,9 +989,9 @@
     <script>
       // --- CONFIGURATION ---
       const CONFIG = {
-        baseSpeed: 0.005, // Doubled from 0.003 for faster gameplay
-        maxSpeed: 0.009, // Maximum speed (2x base speed) - doubled from 0.006
-        accelerationRate: 0.0000015, // Doubled acceleration rate for faster progression
+        baseSpeed: 0.0045, // Doubled from 0.003 for faster gameplay
+        maxSpeed: 0.0065, // Maximum speed (2x base speed) - doubled from 0.006
+        accelerationRate: 0.000001, // Doubled acceleration rate for faster progression
         turnSpeed: 0.25,
         worldRadius: 100,
         spawnInterval: 0.18,
@@ -3994,9 +3994,9 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           // Only check trees that are ahead of player's position (not behind)
           const angleDiff = playerAngle - obj.angle; // Positive = tree is ahead, negative = tree is behind
 
-          // Aggressively skip trees that are behind or at the player (already passed)
-          // Use strict threshold to prevent collisions when moving backward
-          if (angleDiff <= 0.02) continue; // Tree is at or behind player (with small buffer), skip it completely
+          // Skip trees that are behind the player (already passed)
+          // Use similar threshold to rocks to account for time-based speed and ensure collisions are detected
+          if (angleDiff < -0.02) continue; // Tree is behind player, skip it completely
 
           // Early exit if tree is too far ahead (angle difference > ~0.08 radians ≈ 4.6 degrees)
           if (angleDiff > 0.08) continue; // Skip if too far ahead
@@ -4004,10 +4004,9 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           // Skip decoration trees (they don't have lanes and shouldn't cause collisions)
           if (obj.lane === null || obj.lane === undefined) continue;
 
-          // Only check X position if tree is clearly ahead and very close (within 0.03 radians ≈ 1.7 degrees)
-          // Very tight window to ensure tree is clearly ahead and prevent backward collisions
-          // The tree's collision point might be slightly behind its angle, so we need a buffer
-          if (angleDiff > 0.02 && angleDiff < 0.03) {
+          // Check X position when tree is close (similar window to rocks to ensure collisions are detected)
+          // Window from -0.02 to 0.03 radians to match rocks and account for faster movement
+          if (angleDiff >= -0.02 && angleDiff < 0.03) {
             // Calculate X position from lane (instanced objects don't have mesh.getWorldPosition)
             const treeX = obj.lane * CONFIG.laneWidth;
             if (Math.abs(treeX - pX) < 1.5) {
