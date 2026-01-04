@@ -3656,8 +3656,15 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           // Spawn gift when crossing into a new interval mark
           if (currentIntervalMark > lastIntervalMark) {
             const giftAngle = -worldSphere.rotation.x + 0.5;
-            spawnGift(giftAngle);
-            lastGiftSpawnDistance = score;
+            const playerAngle = -worldSphere.rotation.x;
+
+            // Never spawn if angle window is too close to player
+            if (Math.abs(playerAngle - giftAngle) >= 0.2) {
+              // Far enough ahead, safe to spawn
+              spawnGift(giftAngle);
+              lastGiftSpawnDistance = score;
+            }
+            // If too close, skip this spawn attempt (will try again next interval)
           }
         }
 
@@ -3744,8 +3751,15 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         if (activeGift) {
           const angleDiff = currentWorldAngle - activeGift.angle;
           if (angleDiff > 1.5) {
+            // Gift expired without being collected - remove it but allow another to spawn
             activeGift.mesh.visible = false;
+            worldSphere.remove(activeGift.mesh);
             activeGift = null;
+            // Reset lastGiftSpawnDistance to current score minus one interval
+            // This allows a new gift to spawn at the next interval mark
+            const giftInterval = isMobileDevice ? 200 : 250;
+            lastGiftSpawnDistance = Math.max(0, score - giftInterval);
+            // Don't set giftCollected = true here - that's only for when player collects it
           }
         }
 
@@ -3790,12 +3804,9 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           // Compare angles directly (no 3D vector math needed!)
           const angleDiff = Math.abs(playerAngle - activeGift.angle);
 
-          // Early exit if gift is too far away (angle difference > ~0.15 radians ≈ 8.6 degrees)
-          if (angleDiff > 0.15) return; // Skip if too far
-
-          // If close enough in angle, check X position
-          if (angleDiff < 0.08) {
-            // ~4.6 degrees
+          // Only check collision if gift is close enough (don't exit entire function!)
+          if (angleDiff <= 0.15 && angleDiff < 0.08) {
+            // ~4.6 degrees - close enough to check X position
             activeGift.mesh.getWorldPosition(_tempVec3);
             if (Math.abs(_tempVec3.x - pX) < 1.5) {
               // Gift collected!
@@ -3806,9 +3817,10 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
               worldSphere.remove(activeGift.mesh);
               activeGift = null;
 
-              return; // Don't check other collisions this frame
+              return; // OK to return here - gift was collected
             }
           }
+          // If gift is too far away, just continue to check other collisions
         }
 
         // Trees - limit checks to nearby objects on mobile
