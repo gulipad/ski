@@ -592,13 +592,25 @@
         top: 40%;
         left: 50%;
         transform: translate(-50%, -50%);
+        text-align: center;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s;
+      }
+
+      #jump-text {
         color: #f1c40f;
         font-weight: 900;
         font-size: 2rem;
         text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.2);
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.2s;
+      }
+
+      #jump-points {
+        color: #ff8c00;
+        font-weight: 700;
+        font-size: 1.2rem;
+        text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.2);
+        margin-top: 5px;
       }
 
       /* Settings Menu */
@@ -762,7 +774,10 @@
     </div>
 
     <div id="crash-overlay"></div>
-    <div id="jump-msg">JUMP!</div>
+    <div id="jump-msg">
+      <div id="jump-text">JUMP!</div>
+      <div id="jump-points">+150</div>
+    </div>
 
     <!-- Settings Menu -->
     <div id="pause-button" title="Pause">⏸️</div>
@@ -4050,7 +4065,10 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
               // Easier to jump over: > 1.0 height required
               if (playerHeight > 1.0) {
                 obj.passed = true;
-                // No bonus points for jumping - just avoid crash
+                // Bonus points for jumping over rocks
+                score += 150;
+                audio.playSfx("twinkle");
+                showJumpMsg();
               } else {
                 triggerCrash();
               }
@@ -4520,6 +4538,14 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
 
       function showJumpMsg() {
         const msg = document.getElementById("jump-msg");
+        const jumpText = document.getElementById("jump-text");
+
+        // Randomize jump message
+        const jumpMessages = ["Oh yeah!", "Acrobat!", "Star!", "Rider!"];
+        const randomMessage =
+          jumpMessages[Math.floor(Math.random() * jumpMessages.length)];
+        jumpText.textContent = randomMessage;
+
         msg.style.opacity = 1;
         msg.style.top = "30%";
         setTimeout(() => {
