@@ -457,6 +457,7 @@
 
       /* Debug Panel */
       #debug-panel {
+        display: none; /* Hidden by default */
         position: absolute;
         top: 10px;
         right: 10px;
@@ -469,6 +470,10 @@
         z-index: 100;
         overflow: hidden;
         transition: height 0.3s ease;
+      }
+
+      #debug-panel.visible {
+        display: block; /* Show when enabled in settings */
       }
 
       #skier-panel {
@@ -741,6 +746,10 @@
       <div class="settings-option">
         <label for="sfx-toggle">Sound Effects</label>
         <input type="checkbox" id="sfx-toggle" checked />
+      </div>
+      <div class="settings-option">
+        <label for="camera-controls-toggle">Camera Controls</label>
+        <input type="checkbox" id="camera-controls-toggle" />
       </div>
     </div>
 
@@ -1166,36 +1175,73 @@
         backgroundMusic = new Audio("/assets/audio/music.mp3");
         backgroundMusic.loop = true;
         backgroundMusic.volume = 0.5;
+        backgroundMusic.preload = "auto";
 
         // Ambient snow sliding sound
         ambientSound = new Audio("/assets/audio/snow-sliding.mp3");
         ambientSound.loop = true;
         ambientSound.volume = ambientSoundBaseVolume;
+        ambientSound.preload = "auto";
 
-        // Sound effects
+        // Sound effects - preload and unlock for mobile
         soundEffects.jump = new Audio("/assets/audio/jump.mp3");
         soundEffects.jump.volume = 0.6;
+        soundEffects.jump.preload = "auto";
 
         soundEffects.crash = new Audio("/assets/audio/crash.mp3");
         soundEffects.crash.volume = 0.7;
+        soundEffects.crash.preload = "auto";
 
         soundEffects.leftTurn = new Audio("/assets/audio/turn.mp3");
         soundEffects.leftTurn.volume = 0.4;
+        soundEffects.leftTurn.preload = "auto";
 
         soundEffects.rightTurn = new Audio("/assets/audio/turn.mp3");
         soundEffects.rightTurn.volume = 0.4;
+        soundEffects.rightTurn.preload = "auto";
 
         soundEffects.ouch3 = new Audio("/assets/audio/ouch_3.mp3");
         soundEffects.ouch3.volume = 0.7;
+        soundEffects.ouch3.preload = "auto";
 
         soundEffects.thump = new Audio("/assets/audio/thump.mp3");
         soundEffects.thump.volume = 0.6;
+        soundEffects.thump.preload = "auto";
 
         soundEffects.ohNo = new Audio("/assets/audio/oh_no.mp3");
         soundEffects.ohNo.volume = 0.7;
+        soundEffects.ohNo.preload = "auto";
 
         soundEffects.twinkle = new Audio("/assets/audio/twinkle.mp3");
         soundEffects.twinkle.volume = 0.8;
+        soundEffects.twinkle.preload = "auto";
+
+        // Unlock audio on mobile by playing and immediately pausing (required for iOS/Safari)
+        if (isMobile()) {
+          const unlockAudio = () => {
+            const unlockPromises = Object.values(soundEffects).map((audio) => {
+              if (audio) {
+                const promise = audio.play();
+                if (promise !== undefined) {
+                  return promise
+                    .then(() => {
+                      audio.pause();
+                      audio.currentTime = 0;
+                    })
+                    .catch(() => {
+                      // Ignore errors during unlock
+                    });
+                }
+              }
+              return Promise.resolve();
+            });
+            Promise.all(unlockPromises).catch(() => {
+              // Ignore errors
+            });
+          };
+          // Unlock immediately if audio context is available
+          unlockAudio();
+        }
 
         // Start music if enabled
         startMusic();
@@ -1244,20 +1290,70 @@
           initAudio();
         }
 
-        const sound = soundEffects[soundName].cloneNode();
-        sound.volume = soundEffects[soundName].volume;
+        const sourceAudio = soundEffects[soundName];
+        if (!sourceAudio) return;
 
-        // On mobile, ensure sound plays with user interaction context
+        // On mobile, clone and play with better error handling
+        const sound = sourceAudio.cloneNode();
+        sound.volume = sourceAudio.volume;
+
+        // Reset to start for consistent playback
+        sound.currentTime = 0;
+
+        // Play with promise handling for mobile compatibility
         const playPromise = sound.play();
         if (playPromise !== undefined) {
-          playPromise.catch((err) => {
-            console.log(`Sound effect ${soundName} failed:`, err);
-            // Try to initialize audio if play failed (mobile autoplay restrictions)
-            if (!audioInitialized) {
-              initAudio();
-            }
-          });
+          playPromise
+            .then(() => {
+              // Success - sound is playing
+            })
+            .catch((err) => {
+              // On mobile, if clone fails, try playing the original (one-time fallback)
+              if (isMobile() && sourceAudio.readyState >= 2) {
+                try {
+                  sourceAudio.currentTime = 0;
+                  sourceAudio.play().catch(() => {
+                    // If both fail, silently ignore (mobile restriction)
+                  });
+                } catch (e) {
+                  // Ignore errors
+                }
+              }
+            });
+        } else {
+          // Fallback for older browsers
+          try {
+            sound.play();
+          } catch (e) {
+            // Ignore errors
+          }
         }
+      }
+
+      // Camera controls visibility state
+      let cameraControlsEnabled = false;
+
+      // Load camera controls preference
+      function loadCameraControlsSetting() {
+        const saved = getCookie("cameraControlsEnabled");
+        cameraControlsEnabled = saved === "true";
+        const debugPanel = document.getElementById("debug-panel");
+        const cameraToggle = document.getElementById("camera-controls-toggle");
+        if (debugPanel) {
+          if (cameraControlsEnabled) {
+            debugPanel.classList.add("visible");
+          } else {
+            debugPanel.classList.remove("visible");
+          }
+        }
+        if (cameraToggle) {
+          cameraToggle.checked = cameraControlsEnabled;
+        }
+      }
+
+      // Save camera controls preference
+      function saveCameraControlsSetting() {
+        setCookie("cameraControlsEnabled", cameraControlsEnabled.toString());
       }
 
       // Settings menu toggle
@@ -1267,6 +1363,9 @@
         const musicToggle = document.getElementById("music-toggle");
         const ambientToggle = document.getElementById("ambient-toggle");
         const sfxToggle = document.getElementById("sfx-toggle");
+        const cameraControlsToggle = document.getElementById(
+          "camera-controls-toggle"
+        );
 
         settingsButton.addEventListener("click", () => {
           settingsMenu.classList.toggle("visible");
@@ -1317,6 +1416,22 @@
           sfxEnabled = e.target.checked;
           saveAudioSettings();
         });
+
+        // Camera controls toggle
+        if (cameraControlsToggle) {
+          cameraControlsToggle.addEventListener("change", (e) => {
+            cameraControlsEnabled = e.target.checked;
+            saveCameraControlsSetting();
+            const debugPanel = document.getElementById("debug-panel");
+            if (debugPanel) {
+              if (cameraControlsEnabled) {
+                debugPanel.classList.add("visible");
+              } else {
+                debugPanel.classList.remove("visible");
+              }
+            }
+          });
+        }
       }
       let score = 0;
       let highScore = 0;
@@ -1392,11 +1507,11 @@
       // Camera State (User Values applied here)
       let camParams = isMobile()
         ? {
-            y: 112,
-            z: 26,
-            lookY: 57,
+            y: 109,
+            z: 34,
+            lookY: 66,
             lookZ: -50,
-            fov: 93,
+            fov: 77,
           }
         : {
             y: 114,
@@ -1587,6 +1702,8 @@
 
         // Setup settings menu
         setupSettingsMenu();
+        // Load camera controls preference
+        loadCameraControlsSetting();
 
         // Initialize audio (after user interaction)
         // Audio will be initialized on first user interaction
