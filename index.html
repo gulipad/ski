@@ -989,7 +989,7 @@
     <script>
       // --- CONFIGURATION ---
       const CONFIG = {
-        baseSpeed: 0.0045, // Doubled from 0.003 for faster gameplay
+        baseSpeed: 0.004, // Doubled from 0.003 for faster gameplay
         maxSpeed: 0.0065, // Maximum speed (2x base speed) - doubled from 0.006
         accelerationRate: 0.000001, // Doubled acceleration rate for faster progression
         turnSpeed: 0.25,
@@ -1161,13 +1161,13 @@
           this.music.loop = true;
           this.music.preload = "auto";
           this.music.playsInline = true;
-          this.music.volume = 0.5;
+          this.music.volume = 0.45;
 
           this.ambient = new Audio("/assets/audio/snow-sliding.mp3");
           this.ambient.loop = true;
           this.ambient.preload = "auto";
           this.ambient.playsInline = true;
-          this.ambient.volume = 0.6;
+          this.ambient.volume = 0.65;
 
           this.unlocked = false;
         }
