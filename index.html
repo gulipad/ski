@@ -322,6 +322,21 @@
           inset 0 2px 5px rgba(0, 0, 0, 0.1);
       }
 
+      #start-button:disabled,
+      #start-button.loading {
+        cursor: not-allowed;
+        opacity: 0.7;
+        background: linear-gradient(135deg, #d0d0d0, #b0b0b0);
+        pointer-events: none;
+      }
+
+      #start-button:disabled:hover,
+      #start-button.loading:hover {
+        transform: none;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15),
+          inset 0 2px 5px rgba(255, 255, 255, 0.5);
+      }
+
       @media (max-width: 768px) {
         #start-button {
           padding: 18px 40px;
@@ -351,7 +366,8 @@
       }
 
       #retry-button,
-      #quit-button {
+      #quit-button,
+      #claim-gift-button {
         background: linear-gradient(135deg, #e8f4f8, #b8d4e3);
         color: #2c3e50;
         border: 3px solid #ffffff;
@@ -370,10 +386,13 @@
         position: relative;
         overflow: hidden;
         margin: 0 10px;
+        text-decoration: none;
+        display: inline-block;
       }
 
       #retry-button::before,
-      #quit-button::before {
+      #quit-button::before,
+      #claim-gift-button::before {
         content: "";
         position: absolute;
         top: -50%;
@@ -392,13 +411,15 @@
       }
 
       #retry-button:hover::before,
-      #quit-button:hover::before {
+      #quit-button:hover::before,
+      #claim-gift-button:hover::before {
         opacity: 1;
         animation: shimmer 1.5s infinite;
       }
 
       #retry-button:hover,
-      #quit-button:hover {
+      #quit-button:hover,
+      #claim-gift-button:hover {
         background: linear-gradient(135deg, #ffffff, #d4e8f0);
         transform: scale(1.05);
         box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3),
@@ -408,7 +429,8 @@
       }
 
       #retry-button:active,
-      #quit-button:active {
+      #quit-button:active,
+      #claim-gift-button:active {
         transform: scale(0.98);
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2),
           inset 0 2px 5px rgba(0, 0, 0, 0.1);
@@ -424,7 +446,8 @@
 
       @media (max-width: 768px) {
         #retry-button,
-        #quit-button {
+        #quit-button,
+        #claim-gift-button {
           padding: 14px 35px;
           font-size: 1.1rem;
           border-radius: 12px;
@@ -711,6 +734,10 @@
         <input type="checkbox" id="music-toggle" checked />
       </div>
       <div class="settings-option">
+        <label for="ambient-toggle">Ambient Sound</label>
+        <input type="checkbox" id="ambient-toggle" checked />
+      </div>
+      <div class="settings-option">
         <label for="sfx-toggle">Sound Effects</label>
         <input type="checkbox" id="sfx-toggle" checked />
       </div>
@@ -903,6 +930,14 @@
         <div id="game-over-buttons">
           <button id="retry-button">Retry</button>
           <button id="quit-button">Quit</button>
+          <a
+            id="claim-gift-button"
+            href="https://www.instagram.com/p/DRj55uzCC65/"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="display: none"
+            >Claim gift 🎁</a
+          >
         </div>
       </div>
     </div>
@@ -922,6 +957,7 @@
         jumpStrength: 0.7, // Lower jump height
         fogColor: 0x87ceeb,
         treeVerticalOffset: 3, // Vertical offset for playing trees (adjustable)
+        treeVerticalOffset: 2, // Vertical offset for gift
         groundColor: 0xffffff,
       };
 
@@ -930,6 +966,7 @@
       let player, playerGroup;
       let worldSphere;
       let particlesSystem;
+      let skiSnowParticles = null;
 
       // Animation
       let mixer;
@@ -1017,10 +1054,49 @@
       let isGameOver = false;
       let skierRollAwayRotation = 0;
       let crashCooldown = false; // Prevent multiple crashes in quick succession
+      let crashCooldownTimeout = null; // Store timeout ID to clear it on restart
       let gameStarted = false; // Track if game has been started
+
+      // Asset loading tracker
+      const assetLoadingState = {
+        skier: false,
+        tree: false,
+        rock: false,
+        redSign: false,
+        blueSign: false,
+        fence: false,
+        gift: false,
+      };
+
+      function checkAllAssetsLoaded() {
+        const allLoaded = Object.values(assetLoadingState).every(
+          (loaded) => loaded === true
+        );
+        if (allLoaded) {
+          const startButton = document.getElementById("start-button");
+          if (startButton) {
+            startButton.disabled = false;
+            startButton.textContent = "Start Game";
+            startButton.classList.remove("loading");
+          }
+        }
+      }
+
+      function updateLoadingProgress() {
+        const loadedCount = Object.values(assetLoadingState).filter(
+          (loaded) => loaded === true
+        ).length;
+        const totalCount = Object.keys(assetLoadingState).length;
+        const percentage = Math.round((loadedCount / totalCount) * 100);
+        const startButton = document.getElementById("start-button");
+        if (startButton && startButton.disabled) {
+          startButton.textContent = `Loading Assets... ${percentage}%`;
+        }
+      }
 
       // Audio system
       let musicEnabled = true;
+      let ambientEnabled = true;
       let sfxEnabled = true;
       let backgroundMusic = null;
       let ambientSound = null;
@@ -1057,10 +1133,14 @@
       // Load audio settings from cookies
       function loadAudioSettings() {
         const musicCookie = getCookie("musicEnabled");
+        const ambientCookie = getCookie("ambientEnabled");
         const sfxCookie = getCookie("sfxEnabled");
 
         if (musicCookie !== null) {
           musicEnabled = musicCookie === "true";
+        }
+        if (ambientCookie !== null) {
+          ambientEnabled = ambientCookie === "true";
         }
         if (sfxCookie !== null) {
           sfxEnabled = sfxCookie === "true";
@@ -1068,17 +1148,21 @@
 
         // Update UI
         document.getElementById("music-toggle").checked = musicEnabled;
+        document.getElementById("ambient-toggle").checked = ambientEnabled;
         document.getElementById("sfx-toggle").checked = sfxEnabled;
       }
 
       // Save audio settings to cookies
       function saveAudioSettings() {
         setCookie("musicEnabled", musicEnabled);
+        setCookie("ambientEnabled", ambientEnabled);
         setCookie("sfxEnabled", sfxEnabled);
       }
 
       // Initialize audio
       function initAudio() {
+        if (audioInitialized) return; // Prevent double initialization
+
         // Background music
         backgroundMusic = new Audio("/assets/audio/music.mp3");
         backgroundMusic.loop = true;
@@ -1111,18 +1195,44 @@
         soundEffects.ohNo = new Audio("/assets/audio/oh_no.mp3");
         soundEffects.ohNo.volume = 0.7;
 
+        soundEffects.twinkle = new Audio("/assets/audio/twinkle.mp3");
+        soundEffects.twinkle.volume = 0.8;
+
         // Start music if enabled
-        if (musicEnabled) {
+        startMusic();
+
+        audioInitialized = true;
+      }
+
+      // Start music
+      function startMusic() {
+        if (backgroundMusic && musicEnabled) {
           backgroundMusic.play().catch((err) => {
-            console.log("Music autoplay prevented:", err);
+            console.log("Music play failed:", err);
           });
         }
+      }
 
-        // Start ambient sound if SFX enabled
-        if (sfxEnabled) {
+      // Start ambient sound
+      function startAmbientSound() {
+        if (
+          ambientSound &&
+          ambientEnabled &&
+          gameActive &&
+          !isPaused &&
+          !isGameOver &&
+          !isJumping
+        ) {
           ambientSound.play().catch((err) => {
-            console.log("Ambient sound autoplay prevented:", err);
+            console.log("Ambient sound play failed:", err);
           });
+        }
+      }
+
+      // Stop ambient sound
+      function stopAmbientSound() {
+        if (ambientSound && !ambientSound.paused) {
+          ambientSound.pause();
         }
       }
 
@@ -1142,6 +1252,7 @@
         const settingsButton = document.getElementById("settings-button");
         const settingsMenu = document.getElementById("settings-menu");
         const musicToggle = document.getElementById("music-toggle");
+        const ambientToggle = document.getElementById("ambient-toggle");
         const sfxToggle = document.getElementById("sfx-toggle");
 
         settingsButton.addEventListener("click", () => {
@@ -1164,27 +1275,34 @@
           saveAudioSettings();
 
           if (musicEnabled && backgroundMusic) {
-            backgroundMusic.play().catch((err) => {
-              console.log("Music play failed:", err);
-            });
+            startMusic();
           } else if (backgroundMusic) {
             backgroundMusic.pause();
           }
         });
 
-        // SFX toggle (controls both sound effects and ambient sound)
+        // Ambient toggle
+        ambientToggle.addEventListener("change", (e) => {
+          ambientEnabled = e.target.checked;
+          saveAudioSettings();
+
+          if (
+            ambientEnabled &&
+            gameActive &&
+            !isPaused &&
+            !isGameOver &&
+            !isJumping
+          ) {
+            startAmbientSound();
+          } else if (ambientSound) {
+            stopAmbientSound();
+          }
+        });
+
+        // SFX toggle (controls only sound effects, not ambient)
         sfxToggle.addEventListener("change", (e) => {
           sfxEnabled = e.target.checked;
           saveAudioSettings();
-
-          // Control ambient sound with SFX toggle
-          if (sfxEnabled && ambientSound) {
-            ambientSound.play().catch((err) => {
-              console.log("Ambient sound play failed:", err);
-            });
-          } else if (ambientSound) {
-            ambientSound.pause();
-          }
         });
       }
       let score = 0;
@@ -1245,6 +1363,9 @@
       let activeObstacles = [];
       let activeBarriers = [];
       let activeBoundaries = [];
+      let activeGift = null; // Only one gift at a time
+      let giftCollected = false; // Track if gift has been collected
+      let lastGiftSpawnDistance = 0; // Track distance when last gift was spawned
 
       // Detect mobile device
       function isMobile() {
@@ -1302,6 +1423,14 @@
 
       // --- START SCREEN ---
       function startGame() {
+        // Ensure audio is initialized
+        if (!audioInitialized) {
+          initAudio();
+        } else {
+          // Try to start music again in case autoplay was blocked
+          startMusic();
+        }
+
         const startScreen = document.getElementById("start-screen");
         if (startScreen) {
           startScreen.classList.add("hidden");
@@ -1331,6 +1460,9 @@
         // Start the game
         gameActive = true;
         gameStarted = true;
+
+        // Start ambient sound when game starts
+        startAmbientSound();
       }
 
       function quitGame() {
@@ -1381,13 +1513,14 @@
         // Setup start button
         const startButton = document.getElementById("start-button");
         if (startButton) {
+          // Initially disable button and show loading state
+          startButton.disabled = true;
+          startButton.classList.add("loading");
+          startButton.textContent = "Loading Assets... 0%";
           startButton.addEventListener("click", () => {
-            // Initialize audio immediately when start button is clicked
-            if (!audioInitialized) {
-              initAudio();
-              audioInitialized = true;
+            if (!startButton.disabled) {
+              startGame();
             }
-            startGame();
           });
         }
 
@@ -1422,6 +1555,7 @@
         loadRockModel();
         loadSignModel();
         loadFenceModel();
+        loadGiftModel();
 
         scene = new THREE.Scene();
         scene.background = new THREE.Color(CONFIG.fogColor);
@@ -1473,6 +1607,7 @@
 
         createPlayer();
         createParticleSystem();
+        createSkiSnowParticles();
 
         window.addEventListener("resize", onWindowResize, false);
         document.addEventListener("keydown", onKeyDown, false);
@@ -1999,17 +2134,24 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
 
             console.log("Skier model loaded! Size:", size);
             updateSkierDisplay();
+            assetLoadingState.skier = true;
+            updateLoadingProgress();
+            checkAllAssetsLoaded();
           },
           (progress) => {
             console.log(
               "Loading skier:",
               ((progress.loaded / progress.total) * 100).toFixed(1) + "%"
             );
+            updateLoadingProgress();
           },
           (error) => {
             console.error("Error loading skier model:", error);
             // Fallback to procedural skier if model fails to load
             createFallbackPlayer();
+            assetLoadingState.skier = true;
+            updateLoadingProgress();
+            checkAllAssetsLoaded();
           }
         );
       }
@@ -2110,6 +2252,118 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         particlesSystem.geometry.attributes.position.needsUpdate = true;
       }
 
+      function createSkiSnowParticles() {
+        const particleCount = 120;
+        const particles = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        const velocities = [];
+        const lifetimes = [];
+        const maxLifetime = 0.6;
+
+        // Initialize all particles as inactive (hidden)
+        for (let i = 0; i < particleCount; i++) {
+          positions[i * 3] = 0;
+          positions[i * 3 + 1] = -1000; // Hide off-screen initially
+          positions[i * 3 + 2] = 0;
+          velocities.push({ x: 0, y: 0, z: 0 });
+          lifetimes.push(0);
+        }
+
+        particles.setAttribute(
+          "position",
+          new THREE.BufferAttribute(positions, 3)
+        );
+
+        const pMaterial = new THREE.PointsMaterial({
+          color: 0xffffff,
+          size: 1.2, // Large size for visibility
+          map: getParticleTexture(),
+          transparent: true,
+          opacity: 1.0, // Full opacity
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          sizeAttenuation: true,
+        });
+
+        skiSnowParticles = new THREE.Points(particles, pMaterial);
+        // Add to playerGroup so particles move and rotate with the skier
+        playerGroup.add(skiSnowParticles);
+        skiSnowParticles.userData = {
+          velocities: velocities,
+          lifetimes: lifetimes,
+          maxLifetime: maxLifetime,
+          particleCount: particleCount,
+        };
+      }
+
+      function updateSkiSnowParticles(deltaTime) {
+        if (!skiSnowParticles || !gameActive || isPaused || isGameOver) return;
+
+        const positions = skiSnowParticles.geometry.attributes.position.array;
+        const userData = skiSnowParticles.userData;
+        const velocities = userData.velocities;
+        const lifetimes = userData.lifetimes;
+        const maxLifetime = userData.maxLifetime;
+
+        // Only emit particles when skiing (not jumping or crashing)
+        if (!isJumping && !isCrashing && currentRotationSpeed > 0.001) {
+          // Emit particles based on speed - always emit at least a few
+          const particlesPerFrame = Math.max(
+            3,
+            Math.floor(3 + currentRotationSpeed * 400)
+          );
+
+          for (let p = 0; p < particlesPerFrame; p++) {
+            // Find an inactive particle
+            for (let i = 0; i < userData.particleCount; i++) {
+              if (lifetimes[i] <= 0) {
+                // Spawn particles in local space relative to skier
+                // Skier model is positioned at skierParams.posZ = -0.3, so skis are around there
+                // Behind the skier means more negative Z in local space
+                const skiOffsetX = (Math.random() - 0.5) * 2.5; // Spread across ski width
+                const skiOffsetY = -0.2 + Math.random() * 0.1; // At ski level
+                const skiOffsetZ = -0.6 - Math.random() * 0.4; // Behind skis (more negative Z)
+
+                positions[i * 3] = skiOffsetX;
+                positions[i * 3 + 1] = skiOffsetY;
+                positions[i * 3 + 2] = skiOffsetZ;
+
+                // Set velocity - particles fly up and back (more negative Z)
+                velocities[i].x = (Math.random() - 0.5) * 0.4;
+                velocities[i].y = Math.random() * 0.5 + 0.3;
+                velocities[i].z = -Math.random() * 0.3 - 0.2; // Backward (negative Z)
+
+                lifetimes[i] = maxLifetime;
+                break;
+              }
+            }
+          }
+        }
+
+        // Update existing particles
+        for (let i = 0; i < userData.particleCount; i++) {
+          if (lifetimes[i] > 0) {
+            // Update position
+            positions[i * 3] += velocities[i].x * deltaTime * 10;
+            positions[i * 3 + 1] += velocities[i].y * deltaTime * 10;
+            positions[i * 3 + 2] += velocities[i].z * deltaTime * 10;
+
+            // Apply gravity
+            velocities[i].y -= 0.5 * deltaTime;
+
+            // Decay lifetime
+            lifetimes[i] -= deltaTime;
+
+            // Hide particle when lifetime expires
+            if (lifetimes[i] <= 0) {
+              positions[i * 3 + 1] = -1000; // Hide off-screen
+            }
+          }
+        }
+
+        skiSnowParticles.geometry.attributes.position.needsUpdate = true;
+      }
+
       function placeOnSphere(obj, angleRad, xOffset) {
         const R = CONFIG.worldRadius;
         const y = R * Math.cos(angleRad);
@@ -2127,6 +2381,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       let redSignModelTemplate = null;
       let blueSignModelTemplate = null;
       let fenceModelTemplate = null;
+      let giftModelTemplate = null;
 
       function loadTreeModel() {
         const loader = new THREE.GLTFLoader();
@@ -2137,16 +2392,23 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
             console.log("Alpine tree model loaded successfully");
             // Spawn initial trees after model is loaded
             spawnInitialTrees();
+            assetLoadingState.tree = true;
+            updateLoadingProgress();
+            checkAllAssetsLoaded();
           },
           (xhr) => {
             console.log(
               `Loading tree: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`
             );
+            updateLoadingProgress();
           },
           (error) => {
             console.error("Error loading alpine tree model:", error);
             // Still spawn trees even if loading fails (will use fallback)
             spawnInitialTrees();
+            assetLoadingState.tree = true;
+            updateLoadingProgress();
+            checkAllAssetsLoaded();
           }
         );
       }
@@ -2158,14 +2420,21 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           (gltf) => {
             rockModelTemplate = gltf.scene;
             console.log("Rock model loaded successfully");
+            assetLoadingState.rock = true;
+            updateLoadingProgress();
+            checkAllAssetsLoaded();
           },
           (xhr) => {
             console.log(
               `Loading rock: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`
             );
+            updateLoadingProgress();
           },
           (error) => {
             console.error("Error loading rock model:", error);
+            assetLoadingState.rock = true;
+            updateLoadingProgress();
+            checkAllAssetsLoaded();
           }
         );
       }
@@ -2179,6 +2448,9 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           (gltf) => {
             redSignModelTemplate = gltf.scene;
             console.log("Red sign model loaded successfully");
+            assetLoadingState.redSign = true;
+            updateLoadingProgress();
+            checkAllAssetsLoaded();
           },
           (xhr) => {
             console.log(
@@ -2186,9 +2458,13 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
                 1
               )}%`
             );
+            updateLoadingProgress();
           },
           (error) => {
             console.error("Error loading red sign model:", error);
+            assetLoadingState.redSign = true;
+            updateLoadingProgress();
+            checkAllAssetsLoaded();
           }
         );
 
@@ -2198,6 +2474,9 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           (gltf) => {
             blueSignModelTemplate = gltf.scene;
             console.log("Blue sign model loaded successfully");
+            assetLoadingState.blueSign = true;
+            updateLoadingProgress();
+            checkAllAssetsLoaded();
           },
           (xhr) => {
             console.log(
@@ -2205,9 +2484,13 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
                 1
               )}%`
             );
+            updateLoadingProgress();
           },
           (error) => {
             console.error("Error loading blue sign model:", error);
+            assetLoadingState.blueSign = true;
+            updateLoadingProgress();
+            checkAllAssetsLoaded();
           }
         );
       }
@@ -2219,14 +2502,47 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           (gltf) => {
             fenceModelTemplate = gltf.scene;
             console.log("Wooden fence model loaded successfully");
+            assetLoadingState.fence = true;
+            updateLoadingProgress();
+            checkAllAssetsLoaded();
           },
           (xhr) => {
             console.log(
               `Loading fence: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`
             );
+            updateLoadingProgress();
           },
           (error) => {
             console.error("Error loading fence model:", error);
+            assetLoadingState.fence = true;
+            updateLoadingProgress();
+            checkAllAssetsLoaded();
+          }
+        );
+      }
+
+      function loadGiftModel() {
+        const loader = new THREE.GLTFLoader();
+        loader.load(
+          "assets/models/gift_v1.glb",
+          (gltf) => {
+            giftModelTemplate = gltf.scene;
+            console.log("Gift model loaded successfully");
+            assetLoadingState.gift = true;
+            updateLoadingProgress();
+            checkAllAssetsLoaded();
+          },
+          (xhr) => {
+            console.log(
+              `Loading gift: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`
+            );
+            updateLoadingProgress();
+          },
+          (error) => {
+            console.error("Error loading gift model:", error);
+            assetLoadingState.gift = true;
+            updateLoadingProgress();
+            checkAllAssetsLoaded();
           }
         );
       }
@@ -2521,6 +2837,113 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         spawnTree(angle, true);
       }
 
+      function createGift() {
+        if (!giftModelTemplate) {
+          console.warn("Gift model not loaded yet, skipping gift creation");
+          return null;
+        }
+
+        // Clone the GLB model
+        const gift = giftModelTemplate.clone();
+
+        // Enable shadows on all meshes
+        gift.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+
+        // Set scale for gift
+        const scale = 2.0;
+        gift.scale.set(scale, scale, scale);
+
+        return gift;
+      }
+
+      function spawnGift(angle) {
+        // Don't spawn if gift already collected or already exists
+        if (giftCollected || activeGift) return;
+
+        const gift = createGift();
+        if (!gift) return;
+
+        // Find a free lane (lane with no obstacles)
+        const occupiedLanes = new Set();
+
+        // Check obstacles at this angle
+        activeObstacles.forEach((obj) => {
+          const oPos = new THREE.Vector3();
+          obj.mesh.getWorldPosition(oPos);
+          // Check if obstacle is near this angle
+          const angleDiff = Math.abs(obj.angle - angle);
+          if (angleDiff < 0.1) {
+            // Determine which lane this obstacle is in
+            const lane = Math.round(oPos.x / CONFIG.laneWidth);
+            if (lane >= -1 && lane <= 1) {
+              occupiedLanes.add(lane);
+            }
+          }
+        });
+
+        // Check barriers at this angle
+        activeBarriers.forEach((obj) => {
+          const oPos = new THREE.Vector3();
+          obj.mesh.getWorldPosition(oPos);
+          const angleDiff = Math.abs(obj.angle - angle);
+          if (angleDiff < 0.1) {
+            const lane = Math.round(oPos.x / CONFIG.laneWidth);
+            if (lane >= -1 && lane <= 1) {
+              occupiedLanes.add(lane);
+            }
+          }
+        });
+
+        // Find a free lane
+        const freeLanes = [-1, 0, 1].filter((lane) => !occupiedLanes.has(lane));
+        if (freeLanes.length === 0) {
+          // No free lanes, don't spawn gift
+          return;
+        }
+
+        // Pick a random free lane
+        const selectedLane =
+          freeLanes[Math.floor(Math.random() * freeLanes.length)];
+        const xPos = selectedLane * CONFIG.laneWidth;
+
+        placeOnSphere(gift, angle, xPos);
+
+        // Position gift slightly above ground for floating effect
+        // Use the same sphere surface normal system as trees/rocks
+        const R = CONFIG.worldRadius;
+        const normalY = Math.cos(angle);
+        const normalZ = Math.sin(angle);
+        // Move along the normal by the offset amount (using same offset as trees)
+        gift.position.y += CONFIG.giftVerticalOffset * normalY;
+        gift.position.z += CONFIG.giftVerticalOffset * normalZ;
+
+        // Store gift with floating animation data
+        activeGift = {
+          mesh: gift,
+          angle: angle,
+          floatOffset: 0,
+          floatSpeed: 1.5 + Math.random() * 0.5, // Random float speed
+          baseY: gift.position.y,
+        };
+      }
+
+      function updateGiftAnimation(deltaTime) {
+        if (!activeGift || !gameActive || isPaused) return;
+
+        // Update floating animation
+        activeGift.floatOffset += deltaTime * activeGift.floatSpeed;
+        const floatAmount = Math.sin(activeGift.floatOffset) * 0.5; // Float up and down
+        activeGift.mesh.position.y = activeGift.baseY + floatAmount;
+
+        // Rotate gift slowly
+        activeGift.mesh.rotation.y += deltaTime * 0.5;
+      }
+
       function updateSubtleAnimations(deltaTime) {
         animationTime += deltaTime * animationSpeed;
 
@@ -2589,6 +3012,8 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         if (!isPaused) {
           updateRightTurnAnimation(delta);
           updateLeftTurnAnimation(delta);
+          updateSkiSnowParticles(delta);
+          updateGiftAnimation(delta);
         }
 
         // World rotation (only if not paused)
@@ -2634,10 +3059,8 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
             isJumping = false;
             verticalVelocity = 0;
 
-            // Restore ambient sound volume when jump ends
-            if (ambientSound && sfxEnabled) {
-              ambientSound.volume = ambientSoundBaseVolume;
-            }
+            // Resume ambient sound when jump ends
+            startAmbientSound();
           }
         }
         player.position.y = CONFIG.worldRadius + playerHeight;
@@ -2687,6 +3110,26 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           lastBoundaryRotation = totalRotationForSpawn;
         }
 
+        // Spawn Gift (only if game is active, not paused, gift not collected, and score >= 100m)
+        // Spawn every 100m after the first 100m (at 100m, 200m, 300m, etc.)
+        if (
+          gameActive &&
+          !isPaused &&
+          !giftCollected &&
+          !activeGift &&
+          score >= 100
+        ) {
+          const currentHundredMeterMark = Math.floor(score / 100);
+          const lastHundredMeterMark = Math.floor(lastGiftSpawnDistance / 100);
+
+          // Spawn gift when crossing into a new 100m mark
+          if (currentHundredMeterMark > lastHundredMeterMark) {
+            const giftAngle = -worldSphere.rotation.x + 0.5;
+            spawnGift(giftAngle);
+            lastGiftSpawnDistance = score;
+          }
+        }
+
         // Update particles and cleanup (only if not paused)
         if (!isPaused) {
           updateParticles();
@@ -2710,11 +3153,41 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
             }
           }
         });
+
+        // Cleanup gift if it goes over horizon
+        if (activeGift) {
+          const gPos = new THREE.Vector3();
+          activeGift.mesh.getWorldPosition(gPos);
+          if (gPos.z < -60) {
+            worldSphere.remove(activeGift.mesh);
+            activeGift = null;
+          }
+        }
       }
 
       function checkCollisions() {
         const pPos = new THREE.Vector3();
         player.getWorldPosition(pPos);
+
+        // Gift collision (non-lethal)
+        if (activeGift && !giftCollected) {
+          const gPos = new THREE.Vector3();
+          activeGift.mesh.getWorldPosition(gPos);
+
+          if (Math.abs(gPos.z - pPos.z) < 1.5) {
+            if (Math.abs(gPos.x - pPos.x) < 1.5) {
+              // Gift collected!
+              playSound("twinkle");
+              giftCollected = true;
+
+              // Remove gift from scene
+              worldSphere.remove(activeGift.mesh);
+              activeGift = null;
+
+              return; // Don't check other collisions this frame
+            }
+          }
+        }
 
         // Trees
         for (let i = activeObstacles.length - 1; i >= 0; i--) {
@@ -2753,10 +3226,17 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       function triggerCrash() {
         if (isGameOver || crashCooldown) return; // Don't process crashes if game is already over or in cooldown
 
+        // Clear any existing cooldown timeout
+        if (crashCooldownTimeout) {
+          clearTimeout(crashCooldownTimeout);
+          crashCooldownTimeout = null;
+        }
+
         // Set cooldown to prevent multiple crashes
         crashCooldown = true;
-        setTimeout(() => {
+        crashCooldownTimeout = setTimeout(() => {
           crashCooldown = false;
+          crashCooldownTimeout = null;
         }, 1000); // 1 second cooldown
 
         // Decrement lives
@@ -2786,9 +3266,7 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         gameActive = false;
 
         // Pause ambient ski noise
-        if (ambientSound && !ambientSound.paused) {
-          ambientSound.pause();
-        }
+        stopAmbientSound();
 
         // Play game over sound
         playSound("ohNo");
@@ -2799,9 +3277,18 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         // Show game over screen
         const gameOverScreen = document.getElementById("game-over-screen");
         const finalScoreValue = document.getElementById("final-score-value");
+        const claimGiftButton = document.getElementById("claim-gift-button");
+
         if (gameOverScreen && finalScoreValue) {
           finalScoreValue.textContent = Math.floor(score);
           gameOverScreen.classList.add("visible");
+
+          // Show claim gift button if score is over 2000m
+          if (claimGiftButton && score > 100) {
+            claimGiftButton.style.display = "inline-block";
+          } else if (claimGiftButton) {
+            claimGiftButton.style.display = "none";
+          }
         }
       }
 
@@ -2825,12 +3312,8 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           } else {
             pauseButton.textContent = "⏸️";
             pauseButton.title = "Pause";
-            // Resume ambient sound if SFX enabled
-            if (ambientSound && sfxEnabled) {
-              ambientSound.play().catch((err) => {
-                console.log("Ambient sound resume failed:", err);
-              });
-            }
+            // Resume ambient sound if enabled
+            startAmbientSound();
             // Resume background music if music enabled
             if (backgroundMusic && musicEnabled) {
               backgroundMusic.play().catch((err) => {
@@ -2879,6 +3362,11 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         isCrashing = false;
         crashTime = 0;
         crashCooldown = false;
+        // Clear any pending crash cooldown timeout
+        if (crashCooldownTimeout) {
+          clearTimeout(crashCooldownTimeout);
+          crashCooldownTimeout = null;
+        }
 
         // Reset turn states
         isRightTurning = false;
@@ -2932,15 +3420,27 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
 
         // Hide game over screen
         const gameOverScreen = document.getElementById("game-over-screen");
+        const claimGiftButton = document.getElementById("claim-gift-button");
         if (gameOverScreen) {
           gameOverScreen.classList.remove("visible");
         }
+        // Hide claim gift button on restart
+        if (claimGiftButton) {
+          claimGiftButton.style.display = "none";
+        }
 
-        // Resume ambient sound if SFX enabled
-        if (ambientSound && sfxEnabled) {
-          ambientSound.play().catch((err) => {
-            console.log("Ambient sound resume failed:", err);
-          });
+        // Resume ambient sound if enabled
+        startAmbientSound();
+
+        // Reset ski snow particles
+        if (skiSnowParticles) {
+          const positions = skiSnowParticles.geometry.attributes.position.array;
+          const lifetimes = skiSnowParticles.userData.lifetimes;
+          for (let i = 0; i < skiSnowParticles.userData.particleCount; i++) {
+            positions[i * 3 + 1] = -1000; // Hide all particles
+            lifetimes[i] = 0;
+          }
+          skiSnowParticles.geometry.attributes.position.needsUpdate = true;
         }
 
         // Spawn initial trees and boundaries for new game
@@ -3169,9 +3669,15 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
         activeObstacles.forEach((o) => worldSphere.remove(o.mesh));
         activeBarriers.forEach((o) => worldSphere.remove(o.mesh));
         activeBoundaries.forEach((o) => worldSphere.remove(o.mesh));
+        if (activeGift) {
+          worldSphere.remove(activeGift.mesh);
+        }
         activeObstacles = [];
         activeBarriers = [];
         activeBoundaries = [];
+        activeGift = null;
+        giftCollected = false;
+        lastGiftSpawnDistance = 0;
 
         player.position.x = 0;
         targetX = 0;
@@ -3319,19 +3825,12 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
           isJumping = true;
           verticalVelocity = CONFIG.jumpStrength;
 
-          // Mute ambient sound during jump
-          if (ambientSound) {
-            ambientSound.volume = 0;
-          }
+          // Pause ambient sound during jump
+          stopAmbientSound();
 
           // Start jump animation
           startJumpAnimation();
           playSound("jump");
-
-          // Initialize audio on first interaction
-          if (typeof initAudioOnInteraction === "function") {
-            initAudioOnInteraction();
-          }
         }
       }
 
@@ -3474,7 +3973,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       function initAudioOnInteraction() {
         if (!audioInitialized) {
           initAudio();
-          audioInitialized = true;
         }
       }
 
@@ -3484,7 +3982,6 @@ skierModel.rotation.set(${skierParams.rotX.toFixed(
       // If autoplay is blocked, it will be initialized on first user interaction
       try {
         initAudio();
-        audioInitialized = true;
       } catch (err) {
         console.log("Audio initialization deferred until user interaction");
       }
